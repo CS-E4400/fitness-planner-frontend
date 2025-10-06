@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { workoutApi } from '@/lib/api'
-import { Workout } from 'fitness-planner-shared'
+import { Workout } from '@/types'
 
 const Home = () => {
   const [workouts, setWorkouts] = useState<Workout[]>([])

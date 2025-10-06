@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
 import { supabase } from '@/lib/supabase'
-import { AuthState, User, Session } from 'fitness-planner-shared'
+import { AuthState, User, Session } from '@/types'
 import { AuthError } from '@supabase/supabase-js'
 
 const initialState: AuthState = {
