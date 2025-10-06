@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { ApiResponse } from '@/types'
+import { ApiResponse, Workout, CreateWorkoutRequest } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -88,8 +88,8 @@ export const apiClient = new ApiClient()
 
 // Workout API functions
 export const workoutApi = {
-  getWorkouts: () => apiClient.get('/api/workouts'),
-  createWorkout: (workout: any) => apiClient.post('/api/workouts', workout),
-  updateWorkout: (id: string, workout: any) => apiClient.put(`/api/workouts/${id}`, workout),
-  deleteWorkout: (id: string) => apiClient.delete(`/api/workouts/${id}`)
+  getWorkouts: (): Promise<ApiResponse<Workout[]>> => apiClient.get<Workout[]>('/api/workouts'),
+  createWorkout: (workout: CreateWorkoutRequest): Promise<ApiResponse<Workout>> => apiClient.post<Workout>('/api/workouts', workout),
+  updateWorkout: (id: string, workout: Partial<CreateWorkoutRequest>): Promise<ApiResponse<Workout>> => apiClient.put<Workout>(`/api/workouts/${id}`, workout),
+  deleteWorkout: (id: string): Promise<ApiResponse<void>> => apiClient.delete<void>(`/api/workouts/${id}`)
 }
