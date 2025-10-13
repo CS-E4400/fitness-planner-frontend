@@ -2,8 +2,9 @@ import { useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { getSession } from '@/redux/features/authSlice'
 import { AppDispatch, RootState } from '@/redux/store'
-import MainLayout from "./components/layouts/MainLayout"
+import HomeLayout from "./components/layouts/HomeLayout"
 import ProtectedRoute from './components/ProtectedRoute'
+import { Outlet } from 'react-router-dom'
 
 const App = () => {
   const dispatch = useDispatch<AppDispatch>()
@@ -26,7 +27,9 @@ const App = () => {
 
   return (
     <ProtectedRoute>
-      <MainLayout />
+      <HomeLayout>
+        <Outlet />
+      </HomeLayout>
     </ProtectedRoute>
   )
 }
