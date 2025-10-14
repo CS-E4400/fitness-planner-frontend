@@ -4,16 +4,22 @@ import { Card } from '../ui/card';
 import { useNavigate } from 'react-router-dom';
 
 interface TodayMenuProps {
-  onAddMeal: () => void;
-  onLogWorkout: () => void;
 }
 
-export default function TodayMenu({ onAddMeal, onLogWorkout }: TodayMenuProps) {
+export default function TodayMenu({}: TodayMenuProps) {
   const navigate = useNavigate();
 
   const handleStartWorkout = () => {
     navigate('/session');
   };
+
+  const onLogWorkout = () => {
+    navigate('/session');
+  }
+
+  const onAddMeal = () => {
+    navigate('/nutrition');
+  }
 
   return (
     <div className="p-4 space-y-6">
@@ -56,7 +62,7 @@ export default function TodayMenu({ onAddMeal, onLogWorkout }: TodayMenuProps) {
               <p>Upper Body Strength</p>
               <p className="text-sm text-muted-foreground">45 min • 6 exercises</p>
             </div>
-            <Button size="sm" variant="ghost">View</Button>
+            <Button size="sm" variant="ghost" onClick={onLogWorkout} >View</Button>
           </div>
         </Card>
         
@@ -66,7 +72,7 @@ export default function TodayMenu({ onAddMeal, onLogWorkout }: TodayMenuProps) {
               <p>Meal Prep Sunday</p>
               <p className="text-sm text-muted-foreground">1800 calories planned</p>
             </div>
-            <Button size="sm" variant="ghost">View</Button>
+            <Button size="sm" variant="ghost" onClick={onAddMeal}>View</Button>
           </div>
         </Card>
       </div>

@@ -1,14 +1,13 @@
-import { User, Settings, HelpCircle, LogOut } from 'lucide-react';
+import { User, Settings, HelpCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useNavigate } from 'react-router-dom';
 
 interface AccountMenuProps {
-  onSignOut: () => void;
 }
 
-export default function AccountMenu({ onSignOut }: AccountMenuProps) {
+export default function AccountMenu({}: AccountMenuProps) {
   const navigate = useNavigate();
 
   const userInfo = {
@@ -20,6 +19,10 @@ export default function AccountMenu({ onSignOut }: AccountMenuProps) {
   const handleViewWorkoutPlan = () => {
     navigate('/session');
   };
+
+  const handleViewNutritionPlan = () => {
+    navigate('/nutrition');
+  }
 
   return (
     <div className="p-4 space-y-6">
@@ -61,7 +64,13 @@ export default function AccountMenu({ onSignOut }: AccountMenuProps) {
               <p className="font-medium">Meal Plan</p>
               <p className="text-sm text-muted-foreground">High Protein Diet</p>
             </div>
-            <Button variant="ghost" size="sm">View</Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={handleViewNutritionPlan}
+            >
+              View
+            </Button>
           </div>
         </Card>
       </div>

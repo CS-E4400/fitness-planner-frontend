@@ -25,6 +25,10 @@ export default function HomeLayout({ children }: HomeLayoutProps) {
       setActiveTab('session')
     } else if (location.pathname === '/account') {
       setActiveTab('account')
+    } else if (location.pathname.startsWith('/nutrition')) {
+        setActiveTab('nutrition')
+    } else if (location.pathname === '/progress') {
+        setActiveTab('progress')
     }
   }, [location.pathname])
 
@@ -40,6 +44,10 @@ export default function HomeLayout({ children }: HomeLayoutProps) {
       navigate('/session')
     } else if (tab === 'account') {
       navigate('/account')
+    } else if (tab === 'nutrition') {
+      navigate('/nutrition')
+    } else if (tab === 'progress') {
+      navigate('/progress')
     }
   }
 
