@@ -1,4 +1,4 @@
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
@@ -16,6 +16,12 @@ interface FoodItem {
   fat: number;
   amount: number;
   unit: string;
+
+  // valores base por 100g (fixos)
+  baseCalories: number;
+  baseProtein: number;
+  baseCarbs: number;
+  baseFat: number;
 }
 
 interface Meal {
@@ -56,7 +62,11 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
           carbs: 58,
           fat: 6,
           amount: 150,
-          unit: 'g'
+          unit: 'g',
+          baseCalories: 320 / 1.5,
+          baseProtein: 12 / 1.5,
+          baseCarbs: 58 / 1.5,
+          baseFat: 6 / 1.5
         },
         {
           id: '2',
@@ -66,13 +76,17 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
           carbs: 8,
           fat: 2,
           amount: 150,
-          unit: 'g'
+          unit: 'g',
+          baseCalories: 100 / 1.5,
+          baseProtein: 15 / 1.5,
+          baseCarbs: 8 / 1.5,
+          baseFat: 2 / 1.5
         }
       ]
     },
-    { id: '2', name: 'Lunch', calories: 560, hasFood: false, foods: [] },
-    { id: '3', name: 'Dinner', calories: 480, hasFood: false, foods: [] },
-    { id: '4', name: 'Snacks', calories: 220, hasFood: false, foods: [] }
+    { id: '2', name: 'Lunch', calories: 0, hasFood: false, foods: [] },
+    { id: '3', name: 'Dinner', calories: 0, hasFood: false, foods: [] },
+    { id: '4', name: 'Snacks', calories: 0, hasFood: false, foods: [] }
   ]);
 
   const foodDatabase = [
@@ -108,14 +122,18 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
       carbs: food.carbs,
       fat: food.fat,
       amount: 100,
-      unit: 'g'
+      unit: 'g',
+      baseCalories: food.calories,
+      baseProtein: food.protein,
+      baseCarbs: food.carbs,
+      baseFat: food.fat
     };
 
-    setMeals(prevMeals => 
-      prevMeals.map(meal => 
-        meal.id === selectedMealId 
-          ? { 
-              ...meal, 
+    setMeals(prevMeals =>
+      prevMeals.map(meal =>
+        meal.id === selectedMealId
+          ? {
+              ...meal,
               hasFood: true,
               foods: [...meal.foods, newFood],
               calories: meal.calories + food.calories
@@ -123,20 +141,65 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
           : meal
       )
     );
-    
+
     setIsAddFoodOpen(false);
     setSearchTerm('');
   };
 
+  const handleRemoveFood = (mealId: string, foodId: string) => {
+    setMeals(prevMeals =>
+      prevMeals.map(meal => {
+        if (meal.id !== mealId) return meal;
+
+        const updatedFoods = meal.foods.filter(f => f.id !== foodId);
+        const updatedCalories = updatedFoods.reduce((sum, f) => sum + f.calories, 0);
+
+        return {
+          ...meal,
+          foods: updatedFoods,
+          hasFood: updatedFoods.length > 0,
+          calories: updatedCalories
+        };
+      })
+    );
+  };
+
+  const handleAmountChange = (mealId: string, foodId: string, newAmount: number) => {
+    if (isNaN(newAmount) || newAmount <= 0) return;
+
+    setMeals(prevMeals =>
+      prevMeals.map(meal => {
+        if (meal.id !== mealId) return meal;
+
+        const updatedFoods = meal.foods.map(food => {
+          if (food.id !== foodId) return food;
+
+          const factor = newAmount / 100;
+          return {
+            ...food,
+            amount: newAmount,
+            calories: Math.round(food.baseCalories * factor),
+            protein: parseFloat((food.baseProtein * factor).toFixed(1)),
+            carbs: parseFloat((food.baseCarbs * factor).toFixed(1)),
+            fat: parseFloat((food.baseFat * factor).toFixed(1))
+          };
+        });
+
+        const updatedCalories = updatedFoods.reduce((sum, f) => sum + f.calories, 0);
+        return { ...meal, foods: updatedFoods, calories: updatedCalories };
+      })
+    );
+  };
+
   const getCategoryColor = (category: string) => {
     const colors: { [key: string]: string } = {
-      'Protein': 'bg-red-100 text-red-800',
-      'Carbs': 'bg-yellow-100 text-yellow-800',
-      'Vegetables': 'bg-green-100 text-green-800',
-      'Fruits': 'bg-orange-100 text-orange-800',
-      'Dairy': 'bg-blue-100 text-blue-800',
-      'Nuts': 'bg-purple-100 text-purple-800',
-      'Grains': 'bg-amber-100 text-amber-800'
+      Protein: 'bg-red-100 text-red-800',
+      Carbs: 'bg-yellow-100 text-yellow-800',
+      Vegetables: 'bg-green-100 text-green-800',
+      Fruits: 'bg-orange-100 text-orange-800',
+      Dairy: 'bg-blue-100 text-blue-800',
+      Nuts: 'bg-purple-100 text-purple-800',
+      Grains: 'bg-amber-100 text-amber-800'
     };
     return colors[category] || 'bg-gray-100 text-gray-800';
   };
@@ -170,7 +233,7 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
       </Card>
 
       <div className="space-y-3">
-        {meals.map((meal) => (
+        {meals.map(meal => (
           <Card key={meal.id} className="p-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -180,48 +243,55 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
                     <p className="text-sm text-muted-foreground">{meal.calories} cal</p>
                   )}
                 </div>
-                
+
                 <div className="flex items-center gap-2">
-                  {!meal.hasFood ? (
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => handleAddFood(meal.id)}
-                    >
-                      Add food
-                    </Button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Input 
-                        type="number" 
-                        placeholder="Quantity"
-                        className="w-20 h-8"
-                      />
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => handleAddFood(meal.id)}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAddFood(meal.id)}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
                 </div>
               </div>
 
               {meal.hasFood && meal.foods.length > 0 && (
                 <div className="space-y-2">
-                  {meal.foods.map((food) => (
-                    <div key={food.id} className="flex items-center justify-between text-sm bg-muted/30 p-2 rounded">
+                  {meal.foods.map(food => (
+                    <div
+                      key={food.id}
+                      className="flex items-center justify-between text-sm bg-muted/30 p-2 rounded"
+                    >
                       <div>
                         <p>{food.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {food.amount}{food.unit} • {food.calories} cal
-                        </p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Input
+                            type="number"
+                            value={food.amount}
+                            onChange={e =>
+                              handleAmountChange(meal.id, food.id, Number(e.target.value))
+                            }
+                            className="w-20 h-6 text-center"
+                            min={1}
+                          />
+                          <span>
+                            {food.unit} • {food.calories} cal
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground text-right">
-                        <p>P: {food.protein}g</p>
-                        <p>C: {food.carbs}g F: {food.fat}g</p>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-muted-foreground text-right">
+                          <p>P: {food.protein}g</p>
+                          <p>C: {food.carbs}g F: {food.fat}g</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveFood(meal.id, food.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -235,8 +305,8 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
       <div className="flex gap-3 pt-4">
         <Dialog open={isAddFoodOpen} onOpenChange={setIsAddFoodOpen}>
           <DialogTrigger asChild>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="flex-1"
               onClick={() => handleAddFood('new')}
             >
@@ -257,15 +327,15 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
                 <Input
                   placeholder="Search foods..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={e => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
-              
+
               <div className="max-h-64 overflow-y-auto space-y-2">
                 {filteredFoods.map((food, index) => (
-                  <Card 
-                    key={index} 
+                  <Card
+                    key={index}
                     className="p-3 cursor-pointer hover:bg-accent transition-colors"
                     onClick={() => addFoodToMeal(food)}
                   >
@@ -291,11 +361,8 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
             </div>
           </DialogContent>
         </Dialog>
-        
-        <Button 
-          onClick={handleFinish}
-          className="flex-1"
-        >
+
+        <Button onClick={handleFinish} className="flex-1">
           Finish
         </Button>
       </div>
