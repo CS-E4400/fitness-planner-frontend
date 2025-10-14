@@ -17,7 +17,6 @@ interface FoodItem {
   amount: number;
   unit: string;
 
-  // valores base por 100g (fixos)
   baseCalories: number;
   baseProtein: number;
   baseCarbs: number;
@@ -40,9 +39,9 @@ interface NutritionMenuProps {
 export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProps) {
   const navigate = useNavigate();
   const [dailyCalories] = useState(1680);
-  const [protein] = useState(109);
-  const [carbs] = useState(168);
-  const [fat] = useState(9);
+  const [proteinGoal] = useState(109);
+  const [carbsGoal] = useState(168);
+  const [fatGoal] = useState(9);
   const [isAddFoodOpen, setIsAddFoodOpen] = useState(false);
   const [selectedMealId, setSelectedMealId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -102,7 +101,18 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
     { name: 'Eggs', calories: 155, protein: 13, carbs: 1.1, fat: 11, category: 'Protein' }
   ];
 
-  const totalConsumed = meals.reduce((sum, meal) => sum + (meal.hasFood ? meal.calories : 0), 0);
+  const totals = meals.reduce(
+    (acc, meal) => {
+      meal.foods.forEach(food => {
+        acc.calories += food.calories;
+        acc.protein += food.protein;
+        acc.carbs += food.carbs;
+        acc.fat += food.fat;
+      });
+      return acc;
+    },
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  );
 
   const filteredFoods = foodDatabase.filter(food =>
     food.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -209,6 +219,19 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
     navigate('/');
   };
 
+  const renderRemaining = (goal: number, consumed: number, label: string, unit = '') => {
+    const remaining = goal - consumed;
+    const isNegative = remaining < 0;
+    return (
+      <div>
+        <p className="text-sm text-muted-foreground">{label} remaining</p>
+        <p className={`text-xl ${isNegative ? 'text-red-500 font-semibold' : ''}`}>
+          {isNegative ? `-${Math.abs(remaining).toFixed(1)}` : remaining.toFixed(1)}{unit}
+        </p>
+      </div>
+    );
+  };
+
   return (
     <div className="p-4 space-y-6">
       <Card className="p-4">
@@ -218,15 +241,15 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
             <p className="text-xs text-muted-foreground">Goal</p>
           </div>
           <div>
-            <p className="text-2xl">{protein}g</p>
+            <p className="text-2xl">{proteinGoal}g</p>
             <p className="text-xs text-muted-foreground">Protein</p>
           </div>
           <div>
-            <p className="text-2xl">{carbs}g</p>
+            <p className="text-2xl">{carbsGoal}g</p>
             <p className="text-xs text-muted-foreground">Carbs</p>
           </div>
           <div>
-            <p className="text-2xl">{fat}g</p>
+            <p className="text-2xl">{fatGoal}g</p>
             <p className="text-xs text-muted-foreground">Fat</p>
           </div>
         </div>
@@ -366,11 +389,12 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
           Finish
         </Button>
       </div>
-
       <Card className="p-4 bg-muted/50">
-        <div className="text-center">
-          <p className="text-sm text-muted-foreground">Calories remaining</p>
-          <p className="text-xl">{dailyCalories - totalConsumed}</p>
+        <div className="grid grid-cols-4 text-center">
+          {renderRemaining(dailyCalories, totals.calories, 'Calories')}
+          {renderRemaining(proteinGoal, totals.protein, 'Protein', 'g')}
+          {renderRemaining(carbsGoal, totals.carbs, 'Carbs', 'g')}
+          {renderRemaining(fatGoal, totals.fat, 'Fat', 'g')}
         </div>
       </Card>
     </div>
