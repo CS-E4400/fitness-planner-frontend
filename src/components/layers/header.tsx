@@ -50,11 +50,11 @@ export default function Header({ activeTab }: HeaderProps) {
   const content = getHeaderContent();
 
   return (
-    <div className="bg-gradient-to-br from-primary/3 via-background to-accent/20">
+    <div className="bg-gradient-to-br from-primary/5 via-background to-accent/10">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="space-y-1">
-          <h1 className="text-2xl tracking-tight">{content.title}</h1>
-          <p className="text-sm text-muted-foreground/80">{content.subtitle}</p>
+          <h1 className="text-2xl tracking-tight text-foreground">{content.title}</h1>
+          <p className="text-sm text-muted-foreground">{content.subtitle}</p>
         </div>
       </div>
     </div>

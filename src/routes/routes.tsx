@@ -5,6 +5,7 @@ import SessionMenu from "@/components/layouts/SessionMenu";
 import AccountMenu from "@/components/layouts/AccountMenu";
 import NutritionMenu from "@/components/layouts/NutritionMenu";
 import ProgressMenu from "@/components/layouts/ProgressMenu";
+import ProfileSettings from "@/components/layouts/ProfileSettingsMenu";
 import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
 import { createBrowserRouter } from "react-router-dom";
@@ -41,6 +42,10 @@ const router = createBrowserRouter([
       {
         path: "progress",
         element: <ProgressMenu />
+      },
+      {
+        path: "profile-settings",
+        element: <ProfileSettings />
       },
       { path: "about", element: <About /> },
     ],

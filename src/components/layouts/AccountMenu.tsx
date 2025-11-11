@@ -3,18 +3,25 @@ import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
 
-interface AccountMenuProps {
-}
-
-export default function AccountMenu({}: AccountMenuProps) {
+export default function AccountMenu() {
   const navigate = useNavigate();
+  const { user } = useSelector((state: RootState) => state.auth);
 
   const userInfo = {
-    name: 'Sarah Johnson',
+    name: user?.name || 'Sarah Johnson',
     title: 'Fitness Enthusiast',
-    initials: 'SJ'
+    email: user?.email || 'sarah.j@example.com',
+    avatarUrl: user?.avatar_url || ''
   };
+
+  const initials = userInfo.name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase();
   
   const handleViewWorkoutPlan = () => {
     navigate('/session');
@@ -24,19 +31,26 @@ export default function AccountMenu({}: AccountMenuProps) {
     navigate('/nutrition');
   }
 
+  const handleProfileSettings = () => {
+    navigate('/profile-settings');
+  };
+
   return (
     <div className="p-4 space-y-6">
       <div className="flex items-center gap-4">
         <Avatar className="w-16 h-16">
-          <AvatarImage src="" />
-          <AvatarFallback>
-            {userInfo.initials}
+          <AvatarImage src={userInfo.avatarUrl} alt={userInfo.name} />
+          <AvatarFallback className="text-xl">
+            {initials}
           </AvatarFallback>
         </Avatar>
         <div>
           <h2 className="font-semibold">{userInfo.name}</h2>
           <p className="text-sm text-muted-foreground">
             {userInfo.title}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {userInfo.email}
           </p>
         </div>
       </div>
@@ -78,7 +92,11 @@ export default function AccountMenu({}: AccountMenuProps) {
       <div className="space-y-3">
         <h3 className="font-medium">Settings</h3>
         <Card className="p-4 space-y-1">
-          <Button variant="ghost" className="w-full justify-start">
+          <Button 
+            variant="ghost" 
+            className="w-full justify-start"
+            onClick={handleProfileSettings}
+          >
             <User className="w-4 h-4 mr-3" />
             Profile Settings
           </Button>

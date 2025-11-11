@@ -52,11 +52,11 @@ export default function HomeLayout({ children }: HomeLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
+    <div className="min-h-screen bg-background">
+      <header className="bg-card border-b border-border shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <h1 className="text-xl font-semibold text-gray-900">
+            <h1 className="text-xl font-semibold text-foreground">
               Fitness Planner
             </h1>
             <div className="flex items-center gap-4">
@@ -69,7 +69,7 @@ export default function HomeLayout({ children }: HomeLayoutProps) {
                       className="w-8 h-8 rounded-full"
                     />
                   )}
-                  <span className="text-sm text-gray-700">
+                  <span className="text-sm text-foreground">
                     {user.name || user.email}
                   </span>
                 </div>
@@ -90,7 +90,7 @@ export default function HomeLayout({ children }: HomeLayoutProps) {
       <Header activeTab={activeTab} userRole="user" />
       <TopNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto bg-background">
         {children}
       </main>
     </div>
