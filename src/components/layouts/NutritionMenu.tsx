@@ -1,14 +1,33 @@
-import { Plus, Search, X } from 'lucide-react';
+import { Plus, Search, X, Save, Edit2, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
+import { useState, useEffect, useRef } from 'react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Badge } from '../ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
+import { supabase } from '@/lib/supabase';
+
+interface FoodFromDB {
+  id: string;
+  name: string;
+  brand?: string;
+  serving_size: number;
+  serving_unit: string;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  category?: string;
+  measurement_type?: 'weight' | 'unit';
+}
 
 interface FoodItem {
   id: string;
+  food_id: string;
   name: string;
   calories: number;
   protein: number;
@@ -16,11 +35,12 @@ interface FoodItem {
   fat: number;
   amount: number;
   unit: string;
-
   baseCalories: number;
   baseProtein: number;
   baseCarbs: number;
   baseFat: number;
+  category?: string;
+  measurementType: 'weight' | 'unit';
 }
 
 interface Meal {
@@ -31,6 +51,27 @@ interface Meal {
   foods: FoodItem[];
 }
 
+interface MealTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  is_public: boolean;
+  meals: Meal[];
+}
+
+const categoryColors: Record<string, string> = {
+  Protein: "bg-red-200 text-red-800",
+  Vegetables: "bg-green-200 text-green-800",
+  Fruit: "bg-orange-200 text-orange-800",
+  Carbs: "bg-yellow-200 text-yellow-800",
+  'Whole Grains': "bg-amber-200 text-amber-800",
+  Dairy: "bg-blue-200 text-blue-800",
+  Legumes: "bg-purple-200 text-purple-800",
+  'Healthy Fats': "bg-lime-200 text-lime-800",
+  Dessert: "bg-pink-200 text-pink-800",
+  Sweetener: "bg-yellow-100 text-yellow-900",
+};
+
 interface NutritionMenuProps {
   onAddFood?: (mealId: string) => void;
   onFinish?: () => void;
@@ -38,68 +79,253 @@ interface NutritionMenuProps {
 
 export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProps) {
   const navigate = useNavigate();
-  const [dailyCalories] = useState(1680);
-  const [proteinGoal] = useState(109);
-  const [carbsGoal] = useState(168);
-  const [fatGoal] = useState(9);
+  const { user } = useSelector((state: RootState) => state.auth);
+  
+  const [dailyCalories, setDailyCalories] = useState(1680);
+  const [proteinGoal, setProteinGoal] = useState(109);
+  const [carbsGoal, setCarbsGoal] = useState(168);
+  const [fatGoal, setFatGoal] = useState(9);
+  const [isEditingGoals, setIsEditingGoals] = useState(false);
   const [isAddFoodOpen, setIsAddFoodOpen] = useState(false);
   const [selectedMealId, setSelectedMealId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [foodDatabase, setFoodDatabase] = useState<FoodFromDB[]>([]);
+  const [isLoadingFoods, setIsLoadingFoods] = useState(false);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const [publicTemplates, setPublicTemplates] = useState<MealTemplate[]>([]);
+  const [userTemplates, setUserTemplates] = useState<MealTemplate[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  const [activeTab, setActiveTab] = useState('create');
 
   const [meals, setMeals] = useState<Meal[]>([
-    { 
-      id: '1', 
-      name: 'Breakfast', 
-      calories: 420, 
-      hasFood: true,
-      foods: [
-        {
-          id: '1',
-          name: 'Oatmeal with Banana',
-          calories: 320,
-          protein: 12,
-          carbs: 58,
-          fat: 6,
-          amount: 150,
-          unit: 'g',
-          baseCalories: 320 / 1.5,
-          baseProtein: 12 / 1.5,
-          baseCarbs: 58 / 1.5,
-          baseFat: 6 / 1.5
-        },
-        {
-          id: '2',
-          name: 'Greek Yogurt',
-          calories: 100,
-          protein: 15,
-          carbs: 8,
-          fat: 2,
-          amount: 150,
-          unit: 'g',
-          baseCalories: 100 / 1.5,
-          baseProtein: 15 / 1.5,
-          baseCarbs: 8 / 1.5,
-          baseFat: 2 / 1.5
-        }
-      ]
-    },
+    { id: '1', name: 'Breakfast', calories: 0, hasFood: false, foods: [] },
     { id: '2', name: 'Lunch', calories: 0, hasFood: false, foods: [] },
     { id: '3', name: 'Dinner', calories: 0, hasFood: false, foods: [] },
     { id: '4', name: 'Snacks', calories: 0, hasFood: false, foods: [] }
   ]);
 
-  const foodDatabase = [
-    { name: 'Chicken Breast', calories: 165, protein: 31, carbs: 0, fat: 3.6, category: 'Protein' },
-    { name: 'Brown Rice', calories: 112, protein: 2.6, carbs: 23, fat: 0.9, category: 'Carbs' },
-    { name: 'Broccoli', calories: 34, protein: 2.8, carbs: 7, fat: 0.4, category: 'Vegetables' },
-    { name: 'Salmon', calories: 208, protein: 22, carbs: 0, fat: 13, category: 'Protein' },
-    { name: 'Sweet Potato', calories: 86, protein: 1.6, carbs: 20, fat: 0.1, category: 'Carbs' },
-    { name: 'Greek Yogurt', calories: 59, protein: 10, carbs: 3.6, fat: 0.4, category: 'Dairy' },
-    { name: 'Almonds', calories: 576, protein: 21, carbs: 22, fat: 49, category: 'Nuts' },
-    { name: 'Banana', calories: 89, protein: 1.1, carbs: 23, fat: 0.3, category: 'Fruits' },
-    { name: 'Oatmeal', calories: 389, protein: 16.9, carbs: 66.3, fat: 6.9, category: 'Grains' },
-    { name: 'Eggs', calories: 155, protein: 13, carbs: 1.1, fat: 11, category: 'Protein' }
-  ];
+  useEffect(() => {
+    loadFoodsFromDB();
+    loadTemplates();
+    
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const loadFoodsFromDB = async () => {
+    setIsLoadingFoods(true);
+    try {
+      const { data, error } = await supabase
+        .from('foods')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setFoodDatabase(data || []);
+    } catch (error) {
+      console.error('Error loading foods:', error);
+    } finally {
+      setIsLoadingFoods(false);
+    }
+  };
+
+  const loadTemplates = async () => {
+    setIsLoadingTemplates(true);
+    try {
+      // Load public templates
+      const { data: publicData, error: publicError } = await supabase
+        .from('meal_templates')
+        .select(`
+          id,
+          name,
+          description,
+          is_public,
+          template_meals (
+            id,
+            meal_type,
+            template_meal_foods (
+              id,
+              food_id,
+              amount,
+              foods (
+                id,
+                name,
+                serving_size,
+                serving_unit,
+                calories,
+                protein,
+                carbs,
+                fat,
+                category,
+                measurement_type
+              )
+            )
+          )
+        `)
+        .eq('is_public', true);
+
+      if (publicError) throw publicError;
+
+      // Load user templates
+      const { data: userData, error: userError } = await supabase
+        .from('meal_templates')
+        .select(`
+          id,
+          name,
+          description,
+          is_public,
+          template_meals (
+            id,
+            meal_type,
+            template_meal_foods (
+              id,
+              food_id,
+              amount,
+              foods (
+                id,
+                name,
+                serving_size,
+                serving_unit,
+                calories,
+                protein,
+                carbs,
+                fat,
+                category,
+                measurement_type
+              )
+            )
+          )
+        `)
+        .eq('user_id', user?.id)
+        .eq('is_public', false);
+
+      if (userError) throw userError;
+
+      setPublicTemplates(formatTemplates(publicData));
+      setUserTemplates(formatTemplates(userData));
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    } finally {
+      setIsLoadingTemplates(false);
+    }
+  };
+
+  const formatTemplates = (data: any[]): MealTemplate[] => {
+    return data.map(template => {
+      const meals: Meal[] = [
+        { id: '1', name: 'Breakfast', calories: 0, hasFood: false, foods: [] },
+        { id: '2', name: 'Lunch', calories: 0, hasFood: false, foods: [] },
+        { id: '3', name: 'Dinner', calories: 0, hasFood: false, foods: [] },
+        { id: '4', name: 'Snacks', calories: 0, hasFood: false, foods: [] }
+      ];
+
+      template.template_meals?.forEach((tm: any) => {
+        const mealIndex = meals.findIndex(m => m.name === tm.meal_type);
+        if (mealIndex === -1) return;
+
+        const foods: FoodItem[] = tm.template_meal_foods?.map((tmf: any) => {
+          const food = tmf.foods;
+          const measurementType = food.measurement_type || 'weight';
+          
+          let baseCalories, baseProtein, baseCarbs, baseFat;
+          let currentCalories, currentProtein, currentCarbs, currentFat;
+          
+          if (measurementType === 'unit') {
+            baseCalories = food.calories || 0;
+            baseProtein = food.protein || 0;
+            baseCarbs = food.carbs || 0;
+            baseFat = food.fat || 0;
+            
+            currentCalories = baseCalories * tmf.amount;
+            currentProtein = baseProtein * tmf.amount;
+            currentCarbs = baseCarbs * tmf.amount;
+            currentFat = baseFat * tmf.amount;
+          } else {
+            const baseFactor = 100 / food.serving_size;
+            baseCalories = (food.calories || 0) * baseFactor;
+            baseProtein = (food.protein || 0) * baseFactor;
+            baseCarbs = (food.carbs || 0) * baseFactor;
+            baseFat = (food.fat || 0) * baseFactor;
+            
+            const currentFactor = tmf.amount / 100;
+            currentCalories = baseCalories * currentFactor;
+            currentProtein = baseProtein * currentFactor;
+            currentCarbs = baseCarbs * currentFactor;
+            currentFat = baseFat * currentFactor;
+          }
+          
+          return {
+            id: tmf.id,
+            food_id: food.id,
+            name: food.name,
+            category: food.category,
+            amount: tmf.amount,
+            unit: measurementType === 'unit' ? 'unit' : 'g',
+            measurementType: measurementType,
+            calories: Math.round(currentCalories),
+            protein: parseFloat(currentProtein.toFixed(1)),
+            carbs: parseFloat(currentCarbs.toFixed(1)),
+            fat: parseFloat(currentFat.toFixed(1)),
+            baseCalories,
+            baseProtein,
+            baseCarbs,
+            baseFat
+          };
+        }) || [];
+
+        const totalCalories = foods.reduce((sum, f) => sum + f.calories, 0);
+        meals[mealIndex] = {
+          ...meals[mealIndex],
+          id: tm.id,
+          hasFood: foods.length > 0,
+          foods,
+          calories: totalCalories
+        };
+      });
+
+      return {
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        is_public: template.is_public,
+        meals
+      };
+    });
+  };
+
+  const loadTemplate = (template: MealTemplate) => {
+    setMeals(template.meals.map(meal => ({ ...meal })));
+    
+    // Calcular totais do template e atualizar goals
+    const templateTotals = template.meals.reduce(
+      (acc, meal) => {
+        meal.foods.forEach(food => {
+          acc.calories += food.calories;
+          acc.protein += food.protein;
+          acc.carbs += food.carbs;
+          acc.fat += food.fat;
+        });
+        return acc;
+      },
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+    
+    setDailyCalories(Math.round(templateTotals.calories));
+    setProteinGoal(Math.round(templateTotals.protein));
+    setCarbsGoal(Math.round(templateTotals.carbs));
+    setFatGoal(Math.round(templateTotals.fat));
+    
+    setActiveTab('create');
+    setIsEditing(false);
+  };
 
   const totals = meals.reduce(
     (acc, meal) => {
@@ -115,7 +341,8 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
   );
 
   const filteredFoods = foodDatabase.filter(food =>
-    food.name.toLowerCase().includes(searchTerm.toLowerCase())
+    food.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    food.brand?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleAddFood = (mealId: string) => {
@@ -123,33 +350,66 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
     setIsAddFoodOpen(true);
   };
 
-  const addFoodToMeal = (food: any) => {
+  const addFoodToMeal = (food: FoodFromDB) => {
+    const measurementType = food.measurement_type || 'weight';
+    const initialAmount = measurementType === 'unit' ? 1 : 100;
+
+    let baseCalories, baseProtein, baseCarbs, baseFat;
+    let currentCalories, currentProtein, currentCarbs, currentFat;
+    
+    if (measurementType === 'unit') {
+      baseCalories = food.calories || 0;
+      baseProtein = food.protein || 0;
+      baseCarbs = food.carbs || 0;
+      baseFat = food.fat || 0;
+      
+      currentCalories = baseCalories;
+      currentProtein = baseProtein;
+      currentCarbs = baseCarbs;
+      currentFat = baseFat;
+    } else {
+      const baseFactor = 100 / food.serving_size;
+      baseCalories = (food.calories || 0) * baseFactor;
+      baseProtein = (food.protein || 0) * baseFactor;
+      baseCarbs = (food.carbs || 0) * baseFactor;
+      baseFat = (food.fat || 0) * baseFactor;
+      
+      currentCalories = baseCalories;
+      currentProtein = baseProtein;
+      currentCarbs = baseCarbs;
+      currentFat = baseFat;
+    }
+
     const newFood: FoodItem = {
-      id: Date.now().toString(),
+      id: `temp_${Date.now()}`,
+      food_id: food.id,
       name: food.name,
-      calories: food.calories,
-      protein: food.protein,
-      carbs: food.carbs,
-      fat: food.fat,
-      amount: 100,
-      unit: 'g',
-      baseCalories: food.calories,
-      baseProtein: food.protein,
-      baseCarbs: food.carbs,
-      baseFat: food.fat
+      category: food.category,
+      amount: initialAmount,
+      unit: measurementType === 'unit' ? 'unit' : 'g',
+      measurementType: measurementType,
+      calories: Math.round(currentCalories),
+      protein: parseFloat(currentProtein.toFixed(1)),
+      carbs: parseFloat(currentCarbs.toFixed(1)),
+      fat: parseFloat(currentFat.toFixed(1)),
+      baseCalories,
+      baseProtein,
+      baseCarbs,
+      baseFat
     };
 
     setMeals(prevMeals =>
-      prevMeals.map(meal =>
-        meal.id === selectedMealId
-          ? {
-              ...meal,
-              hasFood: true,
-              foods: [...meal.foods, newFood],
-              calories: meal.calories + food.calories
-            }
-          : meal
-      )
+      prevMeals.map(meal => {
+        if (meal.id === selectedMealId || meal.name === selectedMealId) {
+          return {
+            ...meal,
+            hasFood: true,
+            foods: [...meal.foods, newFood],
+            calories: meal.calories + newFood.calories
+          };
+        }
+        return meal;
+      })
     );
 
     setIsAddFoodOpen(false);
@@ -184,7 +444,13 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
         const updatedFoods = meal.foods.map(food => {
           if (food.id !== foodId) return food;
 
-          const factor = newAmount / 100;
+          let factor;
+          if (food.measurementType === 'unit') {
+            factor = newAmount;
+          } else {
+            factor = newAmount / 100;
+          }
+          
           return {
             ...food,
             amount: newAmount,
@@ -201,22 +467,141 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
     );
   };
 
-  const getCategoryColor = (category: string) => {
-    const colors: { [key: string]: string } = {
-      Protein: 'bg-red-100 text-red-800',
-      Carbs: 'bg-yellow-100 text-yellow-800',
-      Vegetables: 'bg-green-100 text-green-800',
-      Fruits: 'bg-orange-100 text-orange-800',
-      Dairy: 'bg-blue-100 text-blue-800',
-      Nuts: 'bg-purple-100 text-purple-800',
-      Grains: 'bg-amber-100 text-amber-800'
-    };
-    return colors[category] || 'bg-gray-100 text-gray-800';
+  const handleSaveTemplate = async () => {
+    if (!user?.id || !templateName.trim()) return;
+
+    try {
+      // Create template
+      const { data: templateData, error: templateError } = await supabase
+        .from('meal_templates')
+        .insert({
+          user_id: user.id,
+          name: templateName,
+          description: templateDescription,
+          is_public: false
+        })
+        .select()
+        .single();
+
+      if (templateError) throw templateError;
+
+      // Create template meals and foods
+      for (const meal of meals) {
+        if (!meal.hasFood) continue;
+
+        const { data: tmData, error: tmError } = await supabase
+          .from('template_meals')
+          .insert({
+            template_id: templateData.id,
+            meal_type: meal.name
+          })
+          .select()
+          .single();
+
+        if (tmError) throw tmError;
+
+        for (const food of meal.foods) {
+          const { error: tmfError } = await supabase
+            .from('template_meal_foods')
+            .insert({
+              template_meal_id: tmData.id,
+              food_id: food.food_id,
+              amount: food.amount
+            });
+
+          if (tmfError) throw tmfError;
+        }
+      }
+
+      setIsSaveDialogOpen(false);
+      setTemplateName('');
+      setTemplateDescription('');
+      loadTemplates();
+      alert('Template saved successfully!');
+    } catch (error) {
+      console.error('Error saving template:', error);
+      alert('Error saving template');
+    }
   };
 
-  const handleFinish = () => {
-    onFinish?.();
-    navigate('/');
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm('Are you sure you want to delete this template?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('meal_templates')
+        .delete()
+        .eq('id', templateId);
+
+      if (error) throw error;
+
+      loadTemplates();
+    } catch (error) {
+      console.error('Error deleting template:', error);
+    }
+  };
+
+  const handleFinish = async () => {
+    if (!user?.id) return;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Delete existing meals for today
+      await supabase
+        .from('meals')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .eq('is_final', true);
+
+      // Save new meals
+      for (const meal of meals) {
+        if (!meal.hasFood) continue;
+
+        const { data: mealData, error: mealError } = await supabase
+          .from('meals')
+          .insert({
+            user_id: user.id,
+            meal_type: meal.name,
+            date: today,
+            is_final: true
+          })
+          .select()
+          .single();
+
+        if (mealError) throw mealError;
+
+        for (const food of meal.foods) {
+          const { error: mfError } = await supabase
+            .from('meal_foods')
+            .insert({
+              meal_id: mealData.id,
+              food_id: food.food_id,
+              amount: food.amount
+            });
+
+          if (mfError) throw mfError;
+        }
+      }
+
+      onFinish?.();
+      navigate('/');
+    } catch (error) {
+      console.error('Error finishing meal:', error);
+    }
+  };
+
+  const getCategoryColor = (category?: string) => {
+    if (!category) return 'bg-gray-200 text-gray-800';
+    return categoryColors[category] || 'bg-gray-200 text-gray-800';
+  };
+
+  const getUnitLabel = (food: FoodItem) => {
+    if (food.measurementType === 'unit') {
+      return food.amount === 1 ? 'unit' : 'units';
+    }
+    return food.unit;
   };
 
   const renderRemaining = (goal: number, consumed: number, label: string, unit = '') => {
@@ -232,24 +617,70 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
     );
   };
 
-  return (
-    <div className="p-4 space-y-6">
+  const renderMealEditor = () => (
+    <div className="space-y-6">
       <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-medium">Daily Goals</h3>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsEditingGoals(!isEditingGoals)}
+          >
+            {isEditingGoals ? 'Done' : <Edit2 className="w-4 h-4" />}
+          </Button>
+        </div>
         <div className="grid grid-cols-4 gap-4 text-center">
           <div>
-            <p className="text-2xl">{dailyCalories}</p>
+            {isEditingGoals ? (
+              <Input
+                type="number"
+                value={dailyCalories}
+                onChange={e => setDailyCalories(Number(e.target.value))}
+                className="text-center text-2xl h-10 mb-1"
+              />
+            ) : (
+              <p className="text-2xl">{dailyCalories}</p>
+            )}
             <p className="text-xs text-muted-foreground">Goal</p>
           </div>
           <div>
-            <p className="text-2xl">{proteinGoal}g</p>
+            {isEditingGoals ? (
+              <Input
+                type="number"
+                value={proteinGoal}
+                onChange={e => setProteinGoal(Number(e.target.value))}
+                className="text-center text-2xl h-10 mb-1"
+              />
+            ) : (
+              <p className="text-2xl">{proteinGoal}g</p>
+            )}
             <p className="text-xs text-muted-foreground">Protein</p>
           </div>
           <div>
-            <p className="text-2xl">{carbsGoal}g</p>
+            {isEditingGoals ? (
+              <Input
+                type="number"
+                value={carbsGoal}
+                onChange={e => setCarbsGoal(Number(e.target.value))}
+                className="text-center text-2xl h-10 mb-1"
+              />
+            ) : (
+              <p className="text-2xl">{carbsGoal}g</p>
+            )}
             <p className="text-xs text-muted-foreground">Carbs</p>
           </div>
           <div>
-            <p className="text-2xl">{fatGoal}g</p>
+            {isEditingGoals ? (
+              <Input
+                type="number"
+                value={fatGoal}
+                onChange={e => setFatGoal(Number(e.target.value))}
+                className="text-center text-2xl h-10 mb-1"
+              />
+            ) : (
+              <p className="text-2xl">{fatGoal}g</p>
+            )}
             <p className="text-xs text-muted-foreground">Fat</p>
           </div>
         </div>
@@ -266,16 +697,13 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
                     <p className="text-sm text-muted-foreground">{meal.calories} cal</p>
                   )}
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleAddFood(meal.id)}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleAddFood(meal.id)}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
               </div>
 
               {meal.hasFood && meal.foods.length > 0 && (
@@ -283,11 +711,16 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
                   {meal.foods.map(food => (
                     <div
                       key={food.id}
-                      className="flex items-center justify-between text-sm bg-muted/30 p-2 rounded"
+                      className="relative flex items-center justify-between text-sm bg-muted/30 p-2 rounded"
                     >
-                      <div>
-                        <p>{food.name}</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {food.category && (
+                        <Badge className={`absolute top-2 right-2 text-xs ${getCategoryColor(food.category)}`}>
+                          {food.category}
+                        </Badge>
+                      )}
+                      <div className="flex-1 pr-20">
+                        <p className="font-medium">{food.name}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                           <Input
                             type="number"
                             value={food.amount}
@@ -295,27 +728,25 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
                               handleAmountChange(meal.id, food.id, Number(e.target.value))
                             }
                             className="w-20 h-6 text-center"
-                            min={1}
+                            min={food.measurementType === 'unit' ? 1 : 1}
+                            step={food.measurementType === 'unit' ? 1 : 1}
                           />
                           <span>
-                            {food.unit} • {food.calories} cal
+                            {getUnitLabel(food)} • {food.calories} cal
                           </span>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-xs text-muted-foreground text-right">
-                          <p>P: {food.protein}g</p>
-                          <p>C: {food.carbs}g F: {food.fat}g</p>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          P: {food.protein}g • C: {food.carbs}g • F: {food.fat}g
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveFood(meal.id, food.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveFood(meal.id, food.id)}
+                        className="text-red-500 hover:text-red-700 absolute bottom-2 right-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -325,70 +756,23 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
         ))}
       </div>
 
-      <div className="flex gap-3 pt-4">
-        <Dialog open={isAddFoodOpen} onOpenChange={setIsAddFoodOpen}>
-          <DialogTrigger asChild>
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => handleAddFood('new')}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add food
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Add Food</DialogTitle>
-              <DialogDescription>
-                Search and select foods to add to your meal
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search foods..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-
-              <div className="max-h-64 overflow-y-auto space-y-2">
-                {filteredFoods.map((food, index) => (
-                  <Card
-                    key={index}
-                    className="p-3 cursor-pointer hover:bg-accent transition-colors"
-                    onClick={() => addFoodToMeal(food)}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h4>{food.name}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {food.calories} cal per 100g
-                        </p>
-                        <div className="flex gap-2 text-xs text-muted-foreground mt-1">
-                          <span>P: {food.protein}g</span>
-                          <span>C: {food.carbs}g</span>
-                          <span>F: {food.fat}g</span>
-                        </div>
-                      </div>
-                      <Badge className={`text-xs ${getCategoryColor(food.category)}`}>
-                        {food.category}
-                      </Badge>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
+      <div className="flex gap-3">
+        <Button
+          variant="outline"
+          className="flex-1"
+          onClick={() => {
+            setIsEditing(true);
+            setIsSaveDialogOpen(true);
+          }}
+        >
+          <Save className="w-4 h-4 mr-2" />
+          Save as Template
+        </Button>
         <Button onClick={handleFinish} className="flex-1">
           Finish
         </Button>
       </div>
+
       <Card className="p-4 bg-muted/50">
         <div className="grid grid-cols-4 text-center">
           {renderRemaining(dailyCalories, totals.calories, 'Calories')}
@@ -397,6 +781,246 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
           {renderRemaining(fatGoal, totals.fat, 'Fat', 'g')}
         </div>
       </Card>
+    </div>
+  );
+
+  return (
+    <div className="p-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="public">Meal Templates</TabsTrigger>
+          <TabsTrigger value="my">My Meals</TabsTrigger>
+          <TabsTrigger value="create">Create Diet</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="public" className="space-y-4 mt-4">
+          <h2 className="text-xl font-semibold">Pre-made Templates</h2>
+          {isLoadingTemplates ? (
+            <p className="text-center text-muted-foreground">Loading templates...</p>
+          ) : publicTemplates.length === 0 ? (
+            <p className="text-center text-muted-foreground">No templates available</p>
+          ) : (
+            <div className="space-y-3">
+              {publicTemplates.map(template => {
+                const templateTotals = template.meals.reduce(
+                  (acc, meal) => {
+                    meal.foods.forEach(food => {
+                      acc.calories += food.calories;
+                      acc.protein += food.protein;
+                      acc.carbs += food.carbs;
+                      acc.fat += food.fat;
+                    });
+                    return acc;
+                  },
+                  { calories: 0, protein: 0, carbs: 0, fat: 0 }
+                );
+                
+                return (
+                  <Card key={template.id} className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="font-semibold">{template.name}</h3>
+                        <p className="text-sm text-muted-foreground">{template.description}</p>
+                        <div className="flex gap-3 text-xs text-muted-foreground mt-2">
+                          <span className="font-medium">{Math.round(templateTotals.calories)} cal</span>
+                          <span>P: {Math.round(templateTotals.protein)}g</span>
+                          <span>C: {Math.round(templateTotals.carbs)}g</span>
+                          <span>F: {Math.round(templateTotals.fat)}g</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => loadTemplate(template)}
+                        >
+                          Select
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="my" className="space-y-4 mt-4">
+          <h2 className="text-xl font-semibold">My Saved Meals</h2>
+          {isLoadingTemplates ? (
+            <p className="text-center text-muted-foreground">Loading your templates...</p>
+          ) : userTemplates.length === 0 ? (
+            <p className="text-center text-muted-foreground">You haven't saved any templates yet</p>
+          ) : (
+            <div className="space-y-3">
+              {userTemplates.map(template => {
+                const templateTotals = template.meals.reduce(
+                  (acc, meal) => {
+                    meal.foods.forEach(food => {
+                      acc.calories += food.calories;
+                      acc.protein += food.protein;
+                      acc.carbs += food.carbs;
+                      acc.fat += food.fat;
+                    });
+                    return acc;
+                  },
+                  { calories: 0, protein: 0, carbs: 0, fat: 0 }
+                );
+                
+                return (
+                  <Card key={template.id} className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="font-semibold">{template.name}</h3>
+                        <p className="text-sm text-muted-foreground">{template.description}</p>
+                        <div className="flex gap-3 text-xs text-muted-foreground mt-2">
+                          <span className="font-medium">{Math.round(templateTotals.calories)} cal</span>
+                          <span>P: {Math.round(templateTotals.protein)}g</span>
+                          <span>C: {Math.round(templateTotals.carbs)}g</span>
+                          <span>F: {Math.round(templateTotals.fat)}g</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => loadTemplate(template)}
+                        >
+                          Select
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => loadTemplate(template)}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteTemplate(template.id)}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="create" className="mt-4">
+          {renderMealEditor()}
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={isAddFoodOpen} onOpenChange={setIsAddFoodOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Food</DialogTitle>
+            <DialogDescription>
+              Search and select foods to add to your meal
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search foods..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <div className="max-h-64 overflow-y-auto space-y-2">
+              {isLoadingFoods ? (
+                <p className="text-center text-muted-foreground">Loading foods...</p>
+              ) : filteredFoods.length === 0 ? (
+                <p className="text-center text-muted-foreground">No foods found</p>
+              ) : (
+                filteredFoods.map((food) => {
+                  const isUnit = food.measurement_type === 'unit';
+                  return (
+                    <Card
+                      key={food.id}
+                      className="p-3 cursor-pointer hover:bg-accent transition-colors relative"
+                      onClick={() => addFoodToMeal(food)}
+                    >
+                      {food.category && (
+                        <Badge className={`absolute top-2 right-2 text-xs ${getCategoryColor(food.category)}`}>
+                          {food.category}
+                        </Badge>
+                      )}
+                      <div className="pr-20">
+                        <h4 className="font-medium">{food.name}</h4>
+                        {food.brand && (
+                          <p className="text-xs text-muted-foreground">{food.brand}</p>
+                        )}
+                        <p className="text-sm text-muted-foreground">
+                          {food.calories || 0} cal per {isUnit ? '1 unit' : `${food.serving_size}${food.serving_unit}`}
+                        </p>
+                        <div className="flex gap-2 text-xs text-muted-foreground mt-1">
+                          <span>P: {food.protein || 0}g</span>
+                          <span>C: {food.carbs || 0}g</span>
+                          <span>F: {food.fat || 0}g</span>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save as Template</DialogTitle>
+            <DialogDescription>
+              Save this meal plan to reuse later
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Template Name</label>
+              <Input
+                placeholder="e.g., My Weekly Meal Plan"
+                value={templateName}
+                onChange={e => setTemplateName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description (optional)</label>
+              <Input
+                placeholder="e.g., High protein diet for muscle gain"
+                value={templateDescription}
+                onChange={e => setTemplateDescription(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setIsSaveDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSaveTemplate}
+                disabled={!templateName.trim()}
+              >
+                Save Template
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
