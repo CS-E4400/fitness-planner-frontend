@@ -98,6 +98,10 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState('');
   const [templateName, setTemplateName] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
   const [activeTab, setActiveTab] = useState('create');
@@ -471,7 +475,6 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
     if (!user?.id || !templateName.trim()) return;
 
     try {
-      // Create template
       const { data: templateData, error: templateError } = await supabase
         .from('meal_templates')
         .insert({
@@ -485,7 +488,6 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
 
       if (templateError) throw templateError;
 
-      // Create template meals and foods
       for (const meal of meals) {
         if (!meal.hasFood) continue;
 
@@ -517,27 +519,42 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
       setTemplateName('');
       setTemplateDescription('');
       loadTemplates();
-      alert('Template saved successfully!');
+      
+      setSuccessMessage('Template saved successfully!');
+      setIsSuccessDialogOpen(true);
     } catch (error) {
       console.error('Error saving template:', error);
-      alert('Error saving template');
+      setSuccessMessage('Error saving template. Please try again.');
+      setIsSuccessDialogOpen(true);
     }
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
-    if (!confirm('Are you sure you want to delete this template?')) return;
+    setTemplateToDelete(templateId);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteTemplate = async () => {
+    if (!templateToDelete) return;
 
     try {
       const { error } = await supabase
         .from('meal_templates')
         .delete()
-        .eq('id', templateId);
+        .eq('id', templateToDelete);
 
       if (error) throw error;
 
+      setIsDeleteDialogOpen(false);
+      setTemplateToDelete(null);
       loadTemplates();
+      
+      setSuccessMessage('Template deleted successfully!');
+      setIsSuccessDialogOpen(true);
     } catch (error) {
       console.error('Error deleting template:', error);
+      setSuccessMessage('Error deleting template. Please try again.');
+      setIsSuccessDialogOpen(true);
     }
   };
 
@@ -1018,6 +1035,54 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
                 Save Template
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Template</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this template? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-4">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setTemplateToDelete(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1"
+              onClick={confirmDeleteTemplate}
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSuccessDialogOpen} onOpenChange={setIsSuccessDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {successMessage.includes('Error') ? 'Error' : 'Success'}
+            </DialogTitle>
+            <DialogDescription>
+              {successMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end mt-4">
+            <Button onClick={() => setIsSuccessDialogOpen(false)}>
+              OK
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
