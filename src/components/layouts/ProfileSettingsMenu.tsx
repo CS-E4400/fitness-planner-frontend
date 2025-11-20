@@ -1,18 +1,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Camera, Moon, Sun } from 'lucide-react';
+import { ArrowLeft, Camera } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Switch } from '../ui/switch';
-import { useTheme } from '@/contexts/ThemeProvider';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 
 export default function ProfileSettings() {
   const navigate = useNavigate();
-  const { theme, toggleTheme } = useTheme();
   const { user } = useSelector((state: RootState) => state.auth);
   
   const [name, setName] = useState(user?.name || 'Sarah Johnson');
@@ -100,33 +97,6 @@ export default function ProfileSettings() {
                   placeholder="your.email@example.com"
                 />
               </div>
-            </div>
-
-            {/* Appearance */}
-            <div className="space-y-4">
-              <h3 className="font-medium">Appearance</h3>
-              
-              <Card className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {theme === 'light' ? (
-                      <Sun className="w-5 h-5 text-yellow-500" />
-                    ) : (
-                      <Moon className="w-5 h-5 text-blue-500" />
-                    )}
-                    <div>
-                      <p className="font-medium">Dark Mode</p>
-                      <p className="text-sm text-muted-foreground">
-                        {theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={theme === 'dark'}
-                    onCheckedChange={toggleTheme}
-                  />
-                </div>
-              </Card>
             </div>
 
             {/* Action Buttons */}

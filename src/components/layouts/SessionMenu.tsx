@@ -358,7 +358,16 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
           completed: !newSetsData[setIndex].completed
         };
 
-        return { ...ex, setsData: newSetsData };
+        // If marked as complete AND it's not the last set, automatically advance
+        const isMarkingComplete = !newSetsData[setIndex].completed === false;
+        const isLastSet = setIndex === ex.setsData.length - 1;
+        const shouldAdvance = isMarkingComplete && !isLastSet;
+
+        return {
+          ...ex,
+          setsData: newSetsData,
+          selectedSet: shouldAdvance ? setIndex + 1 : ex.selectedSet
+        };
       })
     );
   };

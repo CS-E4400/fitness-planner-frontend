@@ -35,6 +35,10 @@ export default function AccountMenu() {
     navigate('/profile-settings');
   };
 
+  const handleAppSettings = () => {
+    navigate('/app-settings');
+  };
+
   return (
     <div className="p-4 space-y-6">
       <div className="flex items-center gap-4">
@@ -100,7 +104,11 @@ export default function AccountMenu() {
             <User className="w-4 h-4 mr-3" />
             Profile Settings
           </Button>
-          <Button variant="ghost" className="w-full justify-start">
+          <Button 
+            variant="ghost" 
+            className="w-full justify-start"
+            onClick={handleAppSettings}
+          >
             <Settings className="w-4 h-4 mr-3" />
             App Settings
           </Button>
