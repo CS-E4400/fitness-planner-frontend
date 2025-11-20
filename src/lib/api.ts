@@ -87,9 +87,17 @@ class ApiClient {
 export const apiClient = new ApiClient()
 
 // Workout API functions
-export const workoutApi = {
+/*export const workoutApi = {
   getWorkouts: (): Promise<ApiResponse<Workout[]>> => apiClient.get<Workout[]>('/api/workouts'),
   createWorkout: (workout: CreateWorkoutRequest): Promise<ApiResponse<Workout>> => apiClient.post<Workout>('/api/workouts', workout),
   updateWorkout: (id: string, workout: Partial<CreateWorkoutRequest>): Promise<ApiResponse<Workout>> => apiClient.put<Workout>(`/api/workouts/${id}`, workout),
   deleteWorkout: (id: string): Promise<ApiResponse<void>> => apiClient.delete<void>(`/api/workouts/${id}`)
+}*/
+
+// Workout API functions
+export const workoutApi = {
+  getWorkouts: () => Promise.resolve({ data: [] }),
+  createWorkout: () => Promise.resolve({ data: null }),
+  updateWorkout: () => Promise.resolve({ data: null }),
+  deleteWorkout: () => Promise.resolve({ data: null })
 }

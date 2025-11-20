@@ -277,6 +277,18 @@ export default function ProgressMenu() {
         </TabsList>
 
         <TabsContent value="weight" className="space-y-4">
+          {/* Header with Log Weight button */}
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">Weight Tracking</h3>
+            <Button
+              size="sm"
+              onClick={() => setIsAddWeightOpen(true)}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Log Weight
+            </Button>
+          </div>
+
           {/* Time Period Selector */}
           <div className="flex gap-2 overflow-x-auto pb-2">
             {(Object.keys(periodLabels) as TimePeriod[]).map(period => (
@@ -439,17 +451,6 @@ export default function ProgressMenu() {
               </div>
             </div>
           </Card>
-
-          {(workoutCount > 0 || mealCount > 0) && (
-            <Card className="p-6 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-800">
-              <div className="space-y-2">
-                <h3 className="font-semibold text-green-900 dark:text-green-100">🎉 Great Job!</h3>
-                <p className="text-sm text-green-800 dark:text-green-200">
-                  You're staying consistent this week. Keep up the excellent work!
-                </p>
-              </div>
-            </Card>
-          )}
         </TabsContent>
       </Tabs>
 

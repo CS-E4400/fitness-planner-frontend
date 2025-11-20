@@ -116,26 +116,12 @@ export default function ProfileSettings() {
           <div className="space-y-6">
             {/* Avatar Section */}
             <div className="flex flex-col items-center gap-4">
-              <div className="relative">
-                <Avatar className="w-24 h-24">
-                  <AvatarImage src={avatarUrl} alt={name} />
-                  <AvatarFallback className="text-2xl">
-                    {initials || '??'}
-                  </AvatarFallback>
-                </Avatar>
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  className="absolute bottom-0 right-0 rounded-full w-8 h-8"
-                  onClick={handleAvatarChange}
-                  disabled={isEditing}
-                >
-                  <Camera className="w-4 h-4" />
-                </Button>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Click to change profile picture
-              </p>
+              <Avatar className="w-24 h-24">
+                <AvatarImage src={avatarUrl} alt={name} />
+                <AvatarFallback className="text-2xl">
+                  {initials || '??'}
+                </AvatarFallback>
+              </Avatar>
             </div>
 
             {/* Personal Information */}

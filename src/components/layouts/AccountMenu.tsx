@@ -1,14 +1,67 @@
-import { User, Settings, HelpCircle, Dumbbell, UtensilsCrossed, TrendingUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Settings, Dumbbell, UtensilsCrossed, TrendingUp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
+import { supabase } from '@/lib/supabase';
 
 export default function AccountMenu() {
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
+
+  const [totalWorkouts, setTotalWorkouts] = useState(0);
+  const [totalMeals, setTotalMeals] = useState(0);
+  const [totalPRs, setTotalPRs] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadStats();
+    }
+  }, [user]);
+
+  const loadStats = async () => {
+    if (!user?.id) return;
+
+    setIsLoading(true);
+    try {
+      // Total de workouts
+      const { data: workouts, error: workoutError } = await supabase
+        .from('workouts')
+        .select('id', { count: 'exact' })
+        .eq('user_id', user.id)
+        .eq('is_final', true);
+
+      if (workoutError) throw workoutError;
+      setTotalWorkouts(workouts?.length || 0);
+
+      // Total de meals
+      const { data: meals, error: mealError } = await supabase
+        .from('meals')
+        .select('id', { count: 'exact' })
+        .eq('user_id', user.id)
+        .eq('is_final', true);
+
+      if (mealError) throw mealError;
+      setTotalMeals(meals?.length || 0);
+
+      // Total de PRs
+      const { data: prs, error: prError } = await supabase
+        .from('exercise_personal_records')
+        .select('id', { count: 'exact' })
+        .eq('user_id', user.id);
+
+      if (prError) throw prError;
+      setTotalPRs(prs?.length || 0);
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const initials = user?.name
     ?.split(' ')
@@ -59,18 +112,45 @@ export default function AccountMenu() {
       <div className="grid grid-cols-3 gap-3">
         <Card className="p-4 text-center">
           <Dumbbell className="w-6 h-6 mx-auto mb-2 text-blue-600 dark:text-blue-400" />
-          <p className="text-2xl font-bold">0</p>
-          <p className="text-xs text-muted-foreground">Workouts</p>
+          {isLoading ? (
+            <div className="animate-pulse">
+              <div className="h-8 bg-muted rounded w-8 mx-auto mb-1"></div>
+              <div className="h-3 bg-muted rounded w-16 mx-auto"></div>
+            </div>
+          ) : (
+            <>
+              <p className="text-2xl font-bold">{totalWorkouts}</p>
+              <p className="text-xs text-muted-foreground">Workouts</p>
+            </>
+          )}
         </Card>
         <Card className="p-4 text-center">
           <UtensilsCrossed className="w-6 h-6 mx-auto mb-2 text-green-600 dark:text-green-400" />
-          <p className="text-2xl font-bold">0</p>
-          <p className="text-xs text-muted-foreground">Meals</p>
+          {isLoading ? (
+            <div className="animate-pulse">
+              <div className="h-8 bg-muted rounded w-8 mx-auto mb-1"></div>
+              <div className="h-3 bg-muted rounded w-16 mx-auto"></div>
+            </div>
+          ) : (
+            <>
+              <p className="text-2xl font-bold">{totalMeals}</p>
+              <p className="text-xs text-muted-foreground">Meals</p>
+            </>
+          )}
         </Card>
         <Card className="p-4 text-center">
           <TrendingUp className="w-6 h-6 mx-auto mb-2 text-purple-600 dark:text-purple-400" />
-          <p className="text-2xl font-bold">0</p>
-          <p className="text-xs text-muted-foreground">PRs</p>
+          {isLoading ? (
+            <div className="animate-pulse">
+              <div className="h-8 bg-muted rounded w-8 mx-auto mb-1"></div>
+              <div className="h-3 bg-muted rounded w-16 mx-auto"></div>
+            </div>
+          ) : (
+            <>
+              <p className="text-2xl font-bold">{totalPRs}</p>
+              <p className="text-xs text-muted-foreground">PRs</p>
+            </>
+          )}
         </Card>
       </div>
 
@@ -132,10 +212,6 @@ export default function AccountMenu() {
           >
             <Settings className="w-4 h-4 mr-3" />
             App Settings
-          </Button>
-          <Button variant="ghost" className="w-full justify-start">
-            <HelpCircle className="w-4 h-4 mr-3" />
-            Help & Support
           </Button>
         </Card>
       </div>

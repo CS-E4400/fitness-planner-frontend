@@ -86,6 +86,12 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
   const [carbsGoal, setCarbsGoal] = useState(168);
   const [fatGoal, setFatGoal] = useState(9);
   const [isEditingGoals, setIsEditingGoals] = useState(false);
+  
+  // Temporary values for editing
+  const [tempProtein, setTempProtein] = useState(proteinGoal.toString());
+  const [tempCarbs, setTempCarbs] = useState(carbsGoal.toString());
+  const [tempFat, setTempFat] = useState(fatGoal.toString());
+  
   const [isAddFoodOpen, setIsAddFoodOpen] = useState(false);
   const [selectedMealId, setSelectedMealId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -124,6 +130,44 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
     };
   }, []);
 
+  // Calculate calories automatically
+  const calculateCalories = (protein: number, carbs: number, fat: number): number => {
+    return Math.round((protein * 4) + (carbs * 4) + (fat * 9));
+  };
+
+  const calculatedCalories = calculateCalories(
+    parseFloat(tempProtein) || 0,
+    parseFloat(tempCarbs) || 0,
+    parseFloat(tempFat) || 0
+  );
+
+  const handleStartEditingGoals = () => {
+    setTempProtein(proteinGoal.toString());
+    setTempCarbs(carbsGoal.toString());
+    setTempFat(fatGoal.toString());
+    setIsEditingGoals(true);
+  };
+
+  const handleSaveGoals = () => {
+    const protein = parseFloat(tempProtein) || 0;
+    const carbs = parseFloat(tempCarbs) || 0;
+    const fat = parseFloat(tempFat) || 0;
+    const calories = calculateCalories(protein, carbs, fat);
+
+    setDailyCalories(calories);
+    setProteinGoal(protein);
+    setCarbsGoal(carbs);
+    setFatGoal(fat);
+    setIsEditingGoals(false);
+  };
+
+  const handleCancelEditGoals = () => {
+    setTempProtein(proteinGoal.toString());
+    setTempCarbs(carbsGoal.toString());
+    setTempFat(fatGoal.toString());
+    setIsEditingGoals(false);
+  };
+
   const loadFoodsFromDB = async () => {
     setIsLoadingFoods(true);
     try {
@@ -144,7 +188,6 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
   const loadTemplates = async () => {
     setIsLoadingTemplates(true);
     try {
-      // Load public templates
       const { data: publicData, error: publicError } = await supabase
         .from('meal_templates')
         .select(`
@@ -178,7 +221,6 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
 
       if (publicError) throw publicError;
 
-      // Load user templates
       const { data: userData, error: userError } = await supabase
         .from('meal_templates')
         .select(`
@@ -308,7 +350,6 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
   const loadTemplate = (template: MealTemplate) => {
     setMeals(template.meals.map(meal => ({ ...meal })));
     
-    // Calcular totais do template e atualizar goals
     const templateTotals = template.meals.reduce(
       (acc, meal) => {
         meal.foods.forEach(food => {
@@ -564,7 +605,6 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      // Delete existing meals for today
       await supabase
         .from('meals')
         .delete()
@@ -572,7 +612,6 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
         .eq('date', today)
         .eq('is_final', true);
 
-      // Save new meals
       for (const meal of meals) {
         if (!meal.hasFood) continue;
 
@@ -602,10 +641,17 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
         }
       }
 
-      onFinish?.();
-      navigate('/');
+      setSuccessMessage('Meal logged successfully!');
+      setIsSuccessDialogOpen(true);
+
+      setTimeout(() => {
+        onFinish?.();
+        navigate('/');
+      }, 1500);
     } catch (error) {
       console.error('Error finishing meal:', error);
+      setSuccessMessage('Error saving meal. Please try again.');
+      setIsSuccessDialogOpen(true);
     }
   };
 
@@ -642,32 +688,27 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setIsEditingGoals(!isEditingGoals)}
+            onClick={isEditingGoals ? handleSaveGoals : handleStartEditingGoals}
           >
-            {isEditingGoals ? 'Done' : <Edit2 className="w-4 h-4" />}
+            {isEditingGoals ? 'Save' : <Edit2 className="w-4 h-4" />}
           </Button>
         </div>
         <div className="grid grid-cols-4 gap-4 text-center">
           <div>
-            {isEditingGoals ? (
-              <Input
-                type="number"
-                value={dailyCalories}
-                onChange={e => setDailyCalories(Number(e.target.value))}
-                className="text-center text-2xl h-10 mb-1"
-              />
-            ) : (
-              <p className="text-2xl">{dailyCalories}</p>
-            )}
+            <p className="text-2xl">{isEditingGoals ? calculatedCalories : dailyCalories}</p>
             <p className="text-xs text-muted-foreground">Calories</p>
+            {isEditingGoals && (
+              <p className="text-xs text-muted-foreground mt-1">(auto)</p>
+            )}
           </div>
           <div>
             {isEditingGoals ? (
               <Input
                 type="number"
-                value={proteinGoal}
-                onChange={e => setProteinGoal(Number(e.target.value))}
-                className="text-center text-2xl h-10 mb-1"
+                value={tempProtein}
+                onChange={e => setTempProtein(e.target.value)}
+                className="text-center text-2xl h-14 mb-1"
+                min="0"
               />
             ) : (
               <p className="text-2xl">{proteinGoal}g</p>
@@ -678,9 +719,10 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
             {isEditingGoals ? (
               <Input
                 type="number"
-                value={carbsGoal}
-                onChange={e => setCarbsGoal(Number(e.target.value))}
-                className="text-center text-2xl h-10 mb-1"
+                value={tempCarbs}
+                onChange={e => setTempCarbs(e.target.value)}
+                className="text-center text-2xl h-14 mb-1"
+                min="0"
               />
             ) : (
               <p className="text-2xl">{carbsGoal}g</p>
@@ -691,9 +733,10 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
             {isEditingGoals ? (
               <Input
                 type="number"
-                value={fatGoal}
-                onChange={e => setFatGoal(Number(e.target.value))}
-                className="text-center text-2xl h-10 mb-1"
+                value={tempFat}
+                onChange={e => setTempFat(e.target.value)}
+                className="text-center text-2xl h-14 mb-1"
+                min="0"
               />
             ) : (
               <p className="text-2xl">{fatGoal}g</p>
@@ -701,6 +744,18 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
             <p className="text-xs text-muted-foreground">Fat</p>
           </div>
         </div>
+        {isEditingGoals && (
+          <div className="mt-3 text-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCancelEditGoals}
+              className="mt-2"
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
       </Card>
 
       <div className="space-y-3">
