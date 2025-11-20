@@ -4,15 +4,20 @@ import { getSession } from '@/redux/features/authSlice'
 import { AppDispatch, RootState } from '@/redux/store'
 import HomeLayout from "./components/layouts/HomeLayout"
 import ProtectedRoute from './components/ProtectedRoute'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 
 const App = () => {
   const dispatch = useDispatch<AppDispatch>()
   const { isLoading } = useSelector((state: RootState) => state.auth)
+  const { pathname } = useLocation()
 
   useEffect(() => {
     dispatch(getSession())
   }, [dispatch])
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
 
   if (isLoading) {
     return (

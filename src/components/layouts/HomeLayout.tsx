@@ -5,51 +5,63 @@ import { signOut } from '@/redux/features/authSlice';
 import { AppDispatch, RootState } from '@/redux/store';
 import TopNavigation from '../layers/TopNavigation';
 import Header from '../layers/header';
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface HomeLayoutProps {
   children: React.ReactNode;
 }
 
 export default function HomeLayout({ children }: HomeLayoutProps) {
-  const dispatch = useDispatch<AppDispatch>()
-  const { user, isLoading } = useSelector((state: RootState) => state.auth)
-  const location = useLocation()
-  const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('today')
+  const dispatch = useDispatch<AppDispatch>();
+  const { user, isLoading } = useSelector((state: RootState) => state.auth);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('today');
 
   useEffect(() => {
     if (location.pathname === '/') {
-      setActiveTab('today')
+      setActiveTab('today');
     } else if (location.pathname === '/session') {
-      setActiveTab('session')
-    } else if (location.pathname === '/account') {
-      setActiveTab('account')
+      setActiveTab('session');
+    } else if (location.pathname === '/account' || 
+               location.pathname === '/profile-settings' || 
+               location.pathname === '/app-settings') {
+      setActiveTab('account');
     } else if (location.pathname.startsWith('/nutrition')) {
-        setActiveTab('nutrition')
+      setActiveTab('nutrition');
     } else if (location.pathname === '/progress') {
-        setActiveTab('progress')
+      setActiveTab('progress');
     }
-  }, [location.pathname])
+  }, [location.pathname]);
 
   const handleSignOut = () => {
-    dispatch(signOut())
-  }
+    dispatch(signOut());
+  };
 
   const handleTabChange = (tab: string) => {
-    setActiveTab(tab)
+    setActiveTab(tab);
     if (tab === 'today') {
-      navigate('/')
+      navigate('/');
     } else if (tab === 'session') {
-      navigate('/session')
+      navigate('/session');
     } else if (tab === 'account') {
-      navigate('/account')
+      navigate('/account');
     } else if (tab === 'nutrition') {
-      navigate('/nutrition')
+      navigate('/nutrition');
     } else if (tab === 'progress') {
-      navigate('/progress')
+      navigate('/progress');
     }
-  }
+  };
+
+  const displayName = user?.name || user?.email?.split('@')[0] || 'User';
+  const initials = user?.name
+    ?.split(' ')
+    .filter(n => n.length > 0)
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || user?.email?.slice(0, 2).toUpperCase() || '??';
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,15 +74,14 @@ export default function HomeLayout({ children }: HomeLayoutProps) {
             <div className="flex items-center gap-4">
               {user && (
                 <div className="flex items-center gap-3">
-                  {user.avatar_url && (
-                    <img
-                      src={user.avatar_url}
-                      alt={user.name || user.email}
-                      className="w-8 h-8 rounded-full"
-                    />
-                  )}
-                  <span className="text-sm text-foreground">
-                    {user.name || user.email}
+                  <Avatar className="w-8 h-8">
+                    <AvatarImage src={user.avatar_url || ''} alt={displayName} />
+                    <AvatarFallback className="text-xs">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm text-foreground hidden sm:block">
+                    {displayName}
                   </span>
                 </div>
               )}

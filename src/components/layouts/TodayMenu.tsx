@@ -1,81 +1,115 @@
-import { Play, Plus } from 'lucide-react';
+import { Dumbbell, UtensilsCrossed, TrendingUp, Calendar } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
 
-interface TodayMenuProps {
-}
-
-export default function TodayMenu({}: TodayMenuProps) {
+export default function TodayMenu() {
   const navigate = useNavigate();
+  const { user } = useSelector((state: RootState) => state.auth);
 
-  const handleStartWorkout = () => {
-    navigate('/session');
+  const today = new Date().toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+
+  const greeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 18) return 'Good Afternoon';
+    return 'Good Evening';
   };
-
-  const onLogWorkout = () => {
-    navigate('/session');
-  }
-
-  const onAddMeal = () => {
-    navigate('/nutrition');
-  }
 
   return (
     <div className="p-4 space-y-6">
-      <Card className="p-4">
-        <div className="text-center space-y-3">
-          <h2 className="text-lg">Leg Day – Start</h2>
-          
-          <button 
-            onClick={handleStartWorkout}
-            className="w-14 h-14 rounded-full bg-primary flex items-center justify-center hover:bg-primary/90 transition-colors mx-auto"
-          >
-            <Play className="w-5 h-5 text-primary-foreground fill-current ml-1" />
-          </button>
+      {/* Welcome Card */}
+      <Card className="p-6 bg-gradient-to-br from-primary/10 to-primary/5">
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold">{greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}!</h2>
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Calendar className="w-4 h-4" />
+            <p className="text-sm">{today}</p>
+          </div>
         </div>
       </Card>
 
-      <div className="flex gap-3">
-        <Button 
-          variant="outline" 
-          onClick={onAddMeal}
-          className="flex-1"
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card 
+          className="p-6 cursor-pointer hover:shadow-lg transition-all hover:scale-105"
+          onClick={() => navigate('/session')}
         >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Meal
-        </Button>
-        <Button 
-          variant="outline" 
-          onClick={onLogWorkout}
-          className="flex-1"
+          <div className="flex flex-col items-center text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <Dumbbell className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold">Start Workout</h3>
+              <p className="text-xs text-muted-foreground mt-1">Track your exercises</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card 
+          className="p-6 cursor-pointer hover:shadow-lg transition-all hover:scale-105"
+          onClick={() => navigate('/nutrition')}
         >
-          Log Workout
-        </Button>
+          <div className="flex flex-col items-center text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <UtensilsCrossed className="w-6 h-6 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold">Log Meal</h3>
+              <p className="text-xs text-muted-foreground mt-1">Track your nutrition</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
-      <div className="space-y-3">
-        <h3>Today's Plan</h3>
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p>Upper Body Strength</p>
-              <p className="text-sm text-muted-foreground">45 min • 6 exercises</p>
+      {/* Progress Card */}
+      <Card className="p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-purple-600 dark:text-purple-400" />
             </div>
-            <Button size="sm" variant="ghost" onClick={onLogWorkout} >View</Button>
-          </div>
-        </Card>
-        
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
             <div>
-              <p>Meal Prep Sunday</p>
-              <p className="text-sm text-muted-foreground">1800 calories planned</p>
+              <h3 className="font-semibold">Your Progress</h3>
+              <p className="text-sm text-muted-foreground">Track your journey</p>
             </div>
-            <Button size="sm" variant="ghost" onClick={onAddMeal}>View</Button>
           </div>
-        </Card>
-      </div>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => navigate('/progress')}
+          >
+            View All
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <div className="text-center p-3 rounded-lg bg-muted/50">
+            <p className="text-2xl font-bold text-primary">0</p>
+            <p className="text-xs text-muted-foreground mt-1">Workouts This Week</p>
+          </div>
+          <div className="text-center p-3 rounded-lg bg-muted/50">
+            <p className="text-2xl font-bold text-primary">0</p>
+            <p className="text-xs text-muted-foreground mt-1">Meals Logged Today</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Motivational Card */}
+      <Card className="p-6 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200 dark:border-orange-800">
+        <div className="space-y-2">
+          <h3 className="font-semibold text-orange-900 dark:text-orange-100">💪 Keep Going!</h3>
+          <p className="text-sm text-orange-800 dark:text-orange-200">
+            Every workout brings you closer to your goals. Stay consistent and track your progress!
+          </p>
+        </div>
+      </Card>
     </div>
   );
 }

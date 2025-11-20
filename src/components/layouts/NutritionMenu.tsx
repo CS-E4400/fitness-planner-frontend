@@ -659,7 +659,7 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
             ) : (
               <p className="text-2xl">{dailyCalories}</p>
             )}
-            <p className="text-xs text-muted-foreground">Goal</p>
+            <p className="text-xs text-muted-foreground">Calories</p>
           </div>
           <div>
             {isEditingGoals ? (

@@ -48,7 +48,50 @@ export const getSession = createAsyncThunk(
     try {
       const { data: { session }, error } = await supabase.auth.getSession()
       if (error) throw error
-      return session
+      
+      if (!session) return null
+
+      // Search additional data from the users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('name, avatar_url')
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      if (userError && userError.code !== 'PGRST116') {
+        // PGRST116 = no rows returned (user does not have a record in users yet)
+        console.error('Error fetching user data:', userError)
+      }
+
+      // Merge data from auth.users with public.users
+      const enrichedUser: User = {
+        id: session.user.id,
+        email: session.user.email,
+        name: userData?.name || session.user.user_metadata?.name || null,
+        avatar_url: userData?.avatar_url || session.user.user_metadata?.avatar_url || null,
+        created_at: session.user.created_at || new Date().toISOString(),
+        updated_at: session.user.updated_at
+      }
+
+      // Create record in users table if it doesn't exist
+      if (!userData) {
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: session.user.id,
+            name: session.user.user_metadata?.name || null,
+            avatar_url: session.user.user_metadata?.avatar_url || null
+          })
+
+        if (insertError) {
+          console.error('Error creating user record:', insertError)
+        }
+      }
+
+      return {
+        ...session,
+        user: enrichedUser
+      }
     } catch (error) {
       return rejectWithValue((error as AuthError).message)
     }
