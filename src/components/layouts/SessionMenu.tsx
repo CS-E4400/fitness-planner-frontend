@@ -1,4 +1,4 @@
-import { Plus, Search, X, Save, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, X, Save, Edit2, Trash2, Check } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
@@ -11,6 +11,12 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { supabase } from '@/lib/supabase';
 
+interface ExerciseSet {
+  weight: number;
+  reps: number;
+  completed: boolean;
+}
+
 interface Exercise {
   id: string;
   exercise_id: string;
@@ -21,6 +27,12 @@ interface Exercise {
   weight: number;
   rest_seconds?: number;
   notes?: string;
+  setsData: ExerciseSet[];
+  selectedSet: number;
+  personalRecord?: {
+    max_weight: number;
+    reps_at_max: number;
+  };
 }
 
 interface WorkoutTemplate {
@@ -120,6 +132,33 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
     }
   };
 
+  const loadPersonalRecords = async (exerciseIds: string[]) => {
+    if (!user?.id || exerciseIds.length === 0) return {};
+
+    try {
+      const { data, error } = await supabase
+        .from('exercise_personal_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('exercise_id', exerciseIds);
+
+      if (error) throw error;
+
+      const prMap: Record<string, any> = {};
+      data?.forEach(pr => {
+        prMap[pr.exercise_id] = {
+          max_weight: pr.max_weight,
+          reps_at_max: pr.reps_at_max
+        };
+      });
+
+      return prMap;
+    } catch (error) {
+      console.error('Error loading personal records:', error);
+      return {};
+    }
+  };
+
   const loadTemplates = async () => {
     setIsLoadingTemplates(true);
     try {
@@ -198,24 +237,47 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
     }));
   };
 
-  const loadTemplate = (template: WorkoutTemplate) => {
-    const formattedExercises: Exercise[] = template.template_exercises.map(te => ({
-      id: `temp_${Date.now()}_${te.id}`,
-      exercise_id: te.exercise_id,
-      name: te.exercises.name,
-      muscle_group: te.exercises.muscle_group,
-      sets: te.sets,
-      reps: te.reps,
-      weight: te.weight || 0,
-      rest_seconds: te.rest_seconds,
-      notes: te.notes
-    }));
+  const loadTemplate = async (template: WorkoutTemplate) => {
+    const exerciseIds = template.template_exercises.map(te => te.exercise_id);
+    const prs = await loadPersonalRecords(exerciseIds);
+
+    const formattedExercises: Exercise[] = template.template_exercises.map(te => {
+      const numSets = te.sets;
+      const setsData: ExerciseSet[] = Array.from({ length: numSets }, () => ({
+        weight: te.weight || 0,
+        reps: te.reps,
+        completed: false
+      }));
+
+      return {
+        id: `temp_${Date.now()}_${te.id}`,
+        exercise_id: te.exercise_id,
+        name: te.exercises.name,
+        muscle_group: te.exercises.muscle_group,
+        sets: numSets,
+        reps: te.reps,
+        weight: te.weight || 0,
+        rest_seconds: te.rest_seconds,
+        notes: te.notes,
+        setsData,
+        selectedSet: 0,
+        personalRecord: prs[te.exercise_id]
+      };
+    });
     
     setSelectedExercises(formattedExercises);
     setActiveTab('create');
   };
 
-  const addExerciseToWorkout = (exercise: ExerciseFromDB) => {
+  const addExerciseToWorkout = async (exercise: ExerciseFromDB) => {
+    const prs = await loadPersonalRecords([exercise.id]);
+
+    const setsData: ExerciseSet[] = Array.from({ length: 3 }, () => ({
+      weight: 0,
+      reps: 10,
+      completed: false
+    }));
+
     const newExercise: Exercise = {
       id: `temp_${Date.now()}`,
       exercise_id: exercise.id,
@@ -225,7 +287,10 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
       reps: 10,
       weight: 0,
       rest_seconds: 60,
-      notes: ''
+      notes: '',
+      setsData,
+      selectedSet: 0,
+      personalRecord: prs[exercise.id]
     };
 
     setSelectedExercises(prev => [...prev, newExercise]);
@@ -237,10 +302,71 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
     setSelectedExercises(prev => prev.filter(ex => ex.id !== id));
   };
 
-  const updateExercise = (id: string, field: string, value: number | string) => {
+  const updateExerciseSets = (id: string, newSetsCount: number) => {
+    if (newSetsCount < 1) return;
+
+    setSelectedExercises(prev =>
+      prev.map(ex => {
+        if (ex.id !== id) return ex;
+
+        const currentSets = ex.setsData.length;
+        let newSetsData = [...ex.setsData];
+
+        if (newSetsCount > currentSets) {
+          const lastSet = ex.setsData[currentSets - 1] || { weight: ex.weight, reps: ex.reps, completed: false };
+          for (let i = currentSets; i < newSetsCount; i++) {
+            newSetsData.push({ ...lastSet, completed: false });
+          }
+        } else {
+          newSetsData = newSetsData.slice(0, newSetsCount);
+        }
+
+        return {
+          ...ex,
+          sets: newSetsCount,
+          setsData: newSetsData,
+          selectedSet: Math.min(ex.selectedSet, newSetsCount - 1)
+        };
+      })
+    );
+  };
+
+  const updateSetData = (exerciseId: string, setIndex: number, field: 'weight' | 'reps', value: number) => {
+    setSelectedExercises(prev =>
+      prev.map(ex => {
+        if (ex.id !== exerciseId) return ex;
+
+        const newSetsData = [...ex.setsData];
+        newSetsData[setIndex] = {
+          ...newSetsData[setIndex],
+          [field]: value
+        };
+
+        return { ...ex, setsData: newSetsData };
+      })
+    );
+  };
+
+  const toggleSetComplete = (exerciseId: string, setIndex: number) => {
+    setSelectedExercises(prev =>
+      prev.map(ex => {
+        if (ex.id !== exerciseId) return ex;
+
+        const newSetsData = [...ex.setsData];
+        newSetsData[setIndex] = {
+          ...newSetsData[setIndex],
+          completed: !newSetsData[setIndex].completed
+        };
+
+        return { ...ex, setsData: newSetsData };
+      })
+    );
+  };
+
+  const selectSet = (exerciseId: string, setIndex: number) => {
     setSelectedExercises(prev =>
       prev.map(ex =>
-        ex.id === id ? { ...ex, [field]: value } : ex
+        ex.id === exerciseId ? { ...ex, selectedSet: setIndex } : ex
       )
     );
   };
@@ -264,14 +390,17 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
 
       for (let i = 0; i < selectedExercises.length; i++) {
         const ex = selectedExercises[i];
+        const avgWeight = ex.setsData.reduce((sum, s) => sum + s.weight, 0) / ex.setsData.length;
+        const avgReps = Math.round(ex.setsData.reduce((sum, s) => sum + s.reps, 0) / ex.setsData.length);
+
         const { error: teError } = await supabase
           .from('template_exercises')
           .insert({
             template_id: templateData.id,
             exercise_id: ex.exercise_id,
             sets: ex.sets,
-            reps: ex.reps,
-            weight: ex.weight,
+            reps: avgReps,
+            weight: avgWeight,
             rest_seconds: ex.rest_seconds,
             notes: ex.notes,
             order_index: i + 1
@@ -329,6 +458,9 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
     try {
       const today = new Date().toISOString().split('T')[0];
 
+      console.log('Creating workout for user:', user.id);
+
+      // Creates the workout
       const { data: workoutData, error: workoutError } = await supabase
         .from('workouts')
         .insert({
@@ -339,28 +471,94 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
         .select()
         .single();
 
-      if (workoutError) throw workoutError;
+      if (workoutError) {
+        console.error('Error creating workout:', workoutError);
+        throw workoutError;
+      }
 
+      console.log('Workout created:', workoutData);
+
+      // Counter for completed sets
+      let totalCompletedSets = 0;
+
+      // Iterate over exercises
       for (const ex of selectedExercises) {
-        for (let i = 0; i < ex.sets; i++) {
-          const { error: setError } = await supabase
+        console.log(`Processing exercise: ${ex.name}`);
+        
+        // Filter only completed sets
+        const completedSets = ex.setsData.filter(set => set.completed);
+        
+        console.log(`Completed sets for ${ex.name}:`, completedSets.length, 'of', ex.setsData.length);
+
+        // Only insert if there is at least 1 completed set
+        if (completedSets.length === 0) {
+          console.log(`Skipping ${ex.name} - no completed sets`);
+          continue;
+        }
+
+        // Insert only the completed sets
+        for (let i = 0; i < completedSets.length; i++) {
+          const setData = completedSets[i];
+          console.log(`Inserting completed set ${i + 1}:`, {
+            workout_id: workoutData.id,
+            exercise_id: ex.exercise_id,
+            weight: setData.weight,
+            reps: setData.reps
+          });
+
+          const { data: setInsertData, error: setError } = await supabase
             .from('workout_sets')
             .insert({
               workout_id: workoutData.id,
               exercise_id: ex.exercise_id,
-              weight: ex.weight,
-              reps: ex.reps,
+              weight: setData.weight,
+              reps: setData.reps,
               rpe: null
-            });
+            })
+            .select();
 
-          if (setError) throw setError;
+          if (setError) {
+            console.error(`Error inserting set ${i + 1}:`, setError);
+            throw setError;
+          }
+
+          console.log(`Set ${i + 1} inserted:`, setInsertData);
+          totalCompletedSets++;
         }
       }
 
-      onFinish?.();
-      navigate('/');
+      console.log(`Total completed sets inserted: ${totalCompletedSets}`);
+
+      // Check created PRs
+      const { data: prs, error: prsError } = await supabase
+        .from('exercise_personal_records')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (prsError) {
+        console.error('Error checking PRs:', prsError);
+      } else {
+        console.log('Personal Records after workout:', prs);
+      }
+
+      // Success message
+      if (totalCompletedSets > 0) {
+        setSuccessMessage(`Workout completed! ${totalCompletedSets} sets saved.`);
+      } else {
+        setSuccessMessage('Workout saved, but no sets were marked as completed.');
+      }
+      
+      setIsSuccessDialogOpen(true);
+
+      // Redirect after 1.5s
+      setTimeout(() => {
+        onFinish?.();
+        navigate('/');
+      }, 1500);
     } catch (error) {
       console.error('Error finishing workout:', error);
+      setSuccessMessage('Error saving workout. Please try again.');
+      setIsSuccessDialogOpen(true);
     }
   };
 
@@ -483,11 +681,16 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
                     <div className="space-y-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="font-medium">{exercise.name}</h3>
                             <Badge className={`text-xs ${getMuscleGroupColor(exercise.muscle_group)}`}>
                               {exercise.muscle_group}
                             </Badge>
+                            {exercise.personalRecord && (
+                              <Badge variant="outline" className="text-xs">
+                                PR: {exercise.personalRecord.max_weight}kg × {exercise.personalRecord.reps_at_max}
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         <Button
@@ -500,37 +703,72 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
                         </Button>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="text-xs text-muted-foreground">Weight (kg)</label>
-                          <Input
-                            type="number"
-                            value={exercise.weight}
-                            onChange={e => updateExercise(exercise.id, 'weight', Number(e.target.value))}
-                            className="h-8"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground">Sets</label>
-                          <Input
-                            type="number"
-                            value={exercise.sets}
-                            onChange={e => updateExercise(exercise.id, 'sets', Number(e.target.value))}
-                            className="h-8"
-                            min={1}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground">Reps</label>
-                          <Input
-                            type="number"
-                            value={exercise.reps}
-                            onChange={e => updateExercise(exercise.id, 'reps', Number(e.target.value))}
-                            className="h-8"
-                            min={1}
-                          />
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-muted-foreground whitespace-nowrap">Number of Sets:</label>
+                        <Input
+                          type="number"
+                          value={exercise.sets}
+                          onChange={e => updateExerciseSets(exercise.id, Number(e.target.value))}
+                          className="h-8 w-20"
+                          min={1}
+                        />
                       </div>
+
+                      <div className="flex gap-2 flex-wrap">
+                        {exercise.setsData.map((setData, index) => (
+                          <Button
+                            key={index}
+                            variant={exercise.selectedSet === index ? "default" : "outline"}
+                            size="sm"
+                            className={`relative ${setData.completed ? 'border-green-500' : ''}`}
+                            onClick={() => selectSet(exercise.id, index)}
+                          >
+                            {setData.completed && (
+                              <Check className="w-3 h-3 absolute top-0 right-0 text-green-500" />
+                            )}
+                            Set {index + 1}
+                          </Button>
+                        ))}
+                      </div>
+
+                      {exercise.selectedSet !== null && exercise.setsData[exercise.selectedSet] && (
+                        <div className="border-t pt-3 space-y-3">
+                          <p className="text-sm font-medium">Set {exercise.selectedSet + 1} Details</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-xs text-muted-foreground">Weight (kg)</label>
+                              <Input
+                                type="number"
+                                value={exercise.setsData[exercise.selectedSet].weight}
+                                onChange={e =>
+                                  updateSetData(exercise.id, exercise.selectedSet, 'weight', Number(e.target.value))
+                                }
+                                className="h-8"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-muted-foreground">Reps</label>
+                              <Input
+                                type="number"
+                                value={exercise.setsData[exercise.selectedSet].reps}
+                                onChange={e =>
+                                  updateSetData(exercise.id, exercise.selectedSet, 'reps', Number(e.target.value))
+                                }
+                                className="h-8"
+                                min={1}
+                              />
+                            </div>
+                          </div>
+                          <Button
+                            variant={exercise.setsData[exercise.selectedSet].completed ? "outline" : "default"}
+                            size="sm"
+                            className="w-full"
+                            onClick={() => toggleSetComplete(exercise.id, exercise.selectedSet)}
+                          >
+                            {exercise.setsData[exercise.selectedSet].completed ? 'Mark Incomplete' : 'Mark Complete'}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </Card>
                 ))
