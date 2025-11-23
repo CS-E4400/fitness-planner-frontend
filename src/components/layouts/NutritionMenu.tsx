@@ -87,10 +87,169 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
   const [fatGoal, setFatGoal] = useState(9);
   const [isEditingGoals, setIsEditingGoals] = useState(false);
   
+  // Lock system for macros
+  const [lockedMacro, setLockedMacro] = useState<'calories' | 'protein' | 'carbs' | 'fat' | null>(null);
+  const [macroPreset, setMacroPreset] = useState<'maintenance' | 'weight_loss' | 'muscle_gain' | 'keto' | 'high_carb'>('maintenance');
+  
   // Temporary values for editing
+  const [tempCalories, setTempCalories] = useState(dailyCalories.toString());
   const [tempProtein, setTempProtein] = useState(proteinGoal.toString());
   const [tempCarbs, setTempCarbs] = useState(carbsGoal.toString());
   const [tempFat, setTempFat] = useState(fatGoal.toString());
+
+  const macroPresets = {
+    maintenance: { name: 'Maintenance', protein: 0.30, carbs: 0.45, fat: 0.25 },
+    weight_loss: { name: 'Weight Loss', protein: 0.35, carbs: 0.35, fat: 0.30 },
+    muscle_gain: { name: 'Muscle Gain', protein: 0.35, carbs: 0.45, fat: 0.20 },
+    keto: { name: 'Keto', protein: 0.20, carbs: 0.05, fat: 0.75 },
+    high_carb: { name: 'High Carb', protein: 0.20, carbs: 0.60, fat: 0.20 }
+  };
+
+  const calculateMacrosFromCalories = (calories: number, preset: typeof macroPreset) => {
+    const ratios = macroPresets[preset];
+    const proteinCals = calories * ratios.protein;
+    const carbsCals = calories * ratios.carbs;
+    const fatCals = calories * ratios.fat;
+    
+    return {
+      protein: Math.round(proteinCals / 4),
+      carbs: Math.round(carbsCals / 4),
+      fat: Math.round(fatCals / 9)
+    };
+  };
+
+  const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => {
+    return Math.round((protein * 4) + (carbs * 4) + (fat * 9));
+  };
+
+  const recalculateMacros = (
+    changedField: 'calories' | 'protein' | 'carbs' | 'fat',
+    newValue: number,
+    currentCalories: number,
+    currentProtein: number,
+    currentCarbs: number,
+    currentFat: number
+  ) => {
+    if (lockedMacro === changedField) {
+      // Can't change a locked field
+      return { calories: currentCalories, protein: currentProtein, carbs: currentCarbs, fat: currentFat };
+    }
+
+    if (changedField === 'calories') {
+      // Calories changed, recalculate macros based on preset
+      const newMacros = calculateMacrosFromCalories(newValue, macroPreset);
+      return {
+        calories: newValue,
+        protein: newMacros.protein,
+        carbs: newMacros.carbs,
+        fat: newMacros.fat
+      };
+    } else {
+      // A macro changed
+      let protein = currentProtein;
+      let carbs = currentCarbs;
+      let fat = currentFat;
+      
+      // Update the changed field
+      if (changedField === 'protein') protein = newValue;
+      if (changedField === 'carbs') carbs = newValue;
+      if (changedField === 'fat') fat = newValue;
+
+      if (lockedMacro === 'calories') {
+        // Calories locked, adjust other macros proportionally
+        const targetCalories = currentCalories;
+        const changedCalories = calculateCaloriesFromMacros(protein, carbs, fat);
+        const diff = changedCalories - targetCalories;
+        
+        if (Math.abs(diff) > 1) {
+          // Need to adjust other macros
+          const otherMacros = ['protein', 'carbs', 'fat'].filter(m => m !== changedField && m !== lockedMacro);
+          
+          if (otherMacros.length === 2) {
+            // Distribute the difference proportionally
+            const ratios = macroPresets[macroPreset];
+            const macro1 = otherMacros[0] as 'protein' | 'carbs' | 'fat';
+            const macro2 = otherMacros[1] as 'protein' | 'carbs' | 'fat';
+            
+            const totalRatio = ratios[macro1] + ratios[macro2];
+            const ratio1 = ratios[macro1] / totalRatio;
+            const ratio2 = ratios[macro2] / totalRatio;
+            
+            const caloriesNeeded = targetCalories - (changedField === 'protein' ? protein * 4 : 
+                                                     changedField === 'carbs' ? carbs * 4 : 
+                                                     fat * 9);
+            
+            const cals1 = caloriesNeeded * ratio1;
+            const cals2 = caloriesNeeded * ratio2;
+            
+            if (macro1 === 'protein') protein = Math.round(cals1 / 4);
+            else if (macro1 === 'carbs') carbs = Math.round(cals1 / 4);
+            else fat = Math.round(cals1 / 9);
+            
+            if (macro2 === 'protein') protein = Math.round(cals2 / 4);
+            else if (macro2 === 'carbs') carbs = Math.round(cals2 / 4);
+            else fat = Math.round(cals2 / 9);
+          }
+        }
+        
+        return {
+          calories: targetCalories,
+          protein,
+          carbs,
+          fat
+        };
+      } else {
+        // No calories lock, just recalculate calories
+        const newCalories = calculateCaloriesFromMacros(protein, carbs, fat);
+        return {
+          calories: newCalories,
+          protein,
+          carbs,
+          fat
+        };
+      }
+    }
+  };
+
+  const handleMacroChange = (field: 'calories' | 'protein' | 'carbs' | 'fat', value: string) => {
+    const numValue = parseFloat(value) || 0;
+    const currentValues = {
+      calories: parseFloat(tempCalories) || 0,
+      protein: parseFloat(tempProtein) || 0,
+      carbs: parseFloat(tempCarbs) || 0,
+      fat: parseFloat(tempFat) || 0
+    };
+
+    const result = recalculateMacros(
+      field,
+      numValue,
+      currentValues.calories,
+      currentValues.protein,
+      currentValues.carbs,
+      currentValues.fat
+    );
+
+    setTempCalories(result.calories.toString());
+    setTempProtein(result.protein.toString());
+    setTempCarbs(result.carbs.toString());
+    setTempFat(result.fat.toString());
+  };
+
+  const handlePresetChange = (preset: typeof macroPreset) => {
+    setMacroPreset(preset);
+    
+    const currentCalories = parseFloat(tempCalories) || 0;
+    if (currentCalories > 0) {
+      const newMacros = calculateMacrosFromCalories(currentCalories, preset);
+      setTempProtein(newMacros.protein.toString());
+      setTempCarbs(newMacros.carbs.toString());
+      setTempFat(newMacros.fat.toString());
+    }
+  };
+
+  const toggleLock = (macro: 'calories' | 'protein' | 'carbs' | 'fat') => {
+    setLockedMacro(current => current === macro ? null : macro);
+  };
   
   const [isAddFoodOpen, setIsAddFoodOpen] = useState(false);
   const [selectedMealId, setSelectedMealId] = useState<string>('');
@@ -142,29 +301,34 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
   );
 
   const handleStartEditingGoals = () => {
+    setTempCalories(dailyCalories.toString());
     setTempProtein(proteinGoal.toString());
     setTempCarbs(carbsGoal.toString());
     setTempFat(fatGoal.toString());
+    setLockedMacro(null);
     setIsEditingGoals(true);
   };
 
   const handleSaveGoals = () => {
+    const calories = parseFloat(tempCalories) || 0;
     const protein = parseFloat(tempProtein) || 0;
     const carbs = parseFloat(tempCarbs) || 0;
     const fat = parseFloat(tempFat) || 0;
-    const calories = calculateCalories(protein, carbs, fat);
 
     setDailyCalories(calories);
     setProteinGoal(protein);
     setCarbsGoal(carbs);
     setFatGoal(fat);
     setIsEditingGoals(false);
+    setLockedMacro(null);
   };
 
   const handleCancelEditGoals = () => {
+    setTempCalories(dailyCalories.toString());
     setTempProtein(proteinGoal.toString());
     setTempCarbs(carbsGoal.toString());
     setTempFat(fatGoal.toString());
+    setLockedMacro(null);
     setIsEditingGoals(false);
   };
 
@@ -693,64 +857,144 @@ export default function NutritionMenu({ onAddFood, onFinish }: NutritionMenuProp
             {isEditingGoals ? 'Save' : <Edit2 className="w-4 h-4" />}
           </Button>
         </div>
+        
+        {isEditingGoals && (
+          <div className="mb-4">
+            <label className="text-xs font-medium mb-2 block">Macro Preset</label>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(macroPresets).map(([key, preset]) => (
+                <Button
+                  key={key}
+                  variant={macroPreset === key ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handlePresetChange(key as typeof macroPreset)}
+                >
+                  {preset.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+        
         <div className="grid grid-cols-4 gap-4 text-center">
           <div>
-            <p className="text-2xl">{isEditingGoals ? calculatedCalories : dailyCalories}</p>
-            <p className="text-xs text-muted-foreground">Calories</p>
-            {isEditingGoals && (
-              <p className="text-xs text-muted-foreground mt-1">(auto)</p>
+            {isEditingGoals ? (
+              <div className="space-y-1">
+                <Input
+                  type="number"
+                  value={tempCalories}
+                  onChange={e => handleMacroChange('calories', e.target.value)}
+                  className="text-center text-xl h-10"
+                  min="0"
+                />
+                <p className="text-xs text-muted-foreground">Calories</p>
+                <Button
+                  variant={lockedMacro === 'calories' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-6 text-xs w-full"
+                  onClick={() => toggleLock('calories')}
+                >
+                  {lockedMacro === 'calories' ? '🔒 Locked' : '🔓 Lock'}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <p className="text-2xl">{dailyCalories}</p>
+                <p className="text-xs text-muted-foreground">Calories</p>
+              </>
             )}
           </div>
           <div>
             {isEditingGoals ? (
-              <Input
-                type="number"
-                value={tempProtein}
-                onChange={e => setTempProtein(e.target.value)}
-                className="text-center text-2xl h-14 mb-1"
-                min="0"
-              />
+              <div className="space-y-1">
+                <Input
+                  type="number"
+                  value={tempProtein}
+                  onChange={e => handleMacroChange('protein', e.target.value)}
+                  className="text-center text-xl h-10"
+                  min="0"
+                />
+                <p className="text-xs text-muted-foreground">Protein</p>
+                <Button
+                  variant={lockedMacro === 'protein' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-6 text-xs w-full"
+                  onClick={() => toggleLock('protein')}
+                >
+                  {lockedMacro === 'protein' ? '🔒 Locked' : '🔓 Lock'}
+                </Button>
+              </div>
             ) : (
-              <p className="text-2xl">{proteinGoal}g</p>
+              <>
+                <p className="text-2xl">{proteinGoal}g</p>
+                <p className="text-xs text-muted-foreground">Protein</p>
+              </>
             )}
-            <p className="text-xs text-muted-foreground">Protein</p>
           </div>
           <div>
             {isEditingGoals ? (
-              <Input
-                type="number"
-                value={tempCarbs}
-                onChange={e => setTempCarbs(e.target.value)}
-                className="text-center text-2xl h-14 mb-1"
-                min="0"
-              />
+              <div className="space-y-1">
+                <Input
+                  type="number"
+                  value={tempCarbs}
+                  onChange={e => handleMacroChange('carbs', e.target.value)}
+                  className="text-center text-xl h-10"
+                  min="0"
+                />
+                <p className="text-xs text-muted-foreground">Carbs</p>
+                <Button
+                  variant={lockedMacro === 'carbs' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-6 text-xs w-full"
+                  onClick={() => toggleLock('carbs')}
+                >
+                  {lockedMacro === 'carbs' ? '🔒 Locked' : '🔓 Lock'}
+                </Button>
+              </div>
             ) : (
-              <p className="text-2xl">{carbsGoal}g</p>
+              <>
+                <p className="text-2xl">{carbsGoal}g</p>
+                <p className="text-xs text-muted-foreground">Carbs</p>
+              </>
             )}
-            <p className="text-xs text-muted-foreground">Carbs</p>
           </div>
           <div>
             {isEditingGoals ? (
-              <Input
-                type="number"
-                value={tempFat}
-                onChange={e => setTempFat(e.target.value)}
-                className="text-center text-2xl h-14 mb-1"
-                min="0"
-              />
+              <div className="space-y-1">
+                <Input
+                  type="number"
+                  value={tempFat}
+                  onChange={e => handleMacroChange('fat', e.target.value)}
+                  className="text-center text-xl h-10"
+                  min="0"
+                />
+                <p className="text-xs text-muted-foreground">Fat</p>
+                <Button
+                  variant={lockedMacro === 'fat' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-6 text-xs w-full"
+                  onClick={() => toggleLock('fat')}
+                >
+                  {lockedMacro === 'fat' ? '🔒 Locked' : '🔓 Lock'}
+                </Button>
+              </div>
             ) : (
-              <p className="text-2xl">{fatGoal}g</p>
+              <>
+                <p className="text-2xl">{fatGoal}g</p>
+                <p className="text-xs text-muted-foreground">Fat</p>
+              </>
             )}
-            <p className="text-xs text-muted-foreground">Fat</p>
           </div>
         </div>
         {isEditingGoals && (
-          <div className="mt-3 text-center">
+          <div className="mt-3 text-center space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Lock a value to keep it fixed while adjusting others
+            </p>
             <Button
               variant="ghost"
               size="sm"
               onClick={handleCancelEditGoals}
-              className="mt-2"
             >
               Cancel
             </Button>

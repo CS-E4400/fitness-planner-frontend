@@ -3,6 +3,7 @@ export interface User {
   email?: string;
   name?: string;
   avatar_url?: string;
+  weight_unit?: 'kg' | 'lbs';
   created_at: string;
   updated_at?: string;
 }

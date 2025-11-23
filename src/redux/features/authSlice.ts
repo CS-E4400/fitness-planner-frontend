@@ -54,7 +54,7 @@ export const getSession = createAsyncThunk(
       // Search additional data from the users table
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('name, avatar_url')
+        .select('name, avatar_url, weight_unit')
         .eq('id', session.user.id)
         .maybeSingle()
 
@@ -69,6 +69,7 @@ export const getSession = createAsyncThunk(
         email: session.user.email,
         name: userData?.name || session.user.user_metadata?.name || null,
         avatar_url: userData?.avatar_url || session.user.user_metadata?.avatar_url || null,
+        weight_unit: userData?.weight_unit || 'kg',
         created_at: session.user.created_at || new Date().toISOString(),
         updated_at: session.user.updated_at
       }
@@ -80,7 +81,8 @@ export const getSession = createAsyncThunk(
           .insert({
             id: session.user.id,
             name: session.user.user_metadata?.name || null,
-            avatar_url: session.user.user_metadata?.avatar_url || null
+            avatar_url: session.user.user_metadata?.avatar_url || null,
+            weight_unit: 'kg'
           })
 
         if (insertError) {

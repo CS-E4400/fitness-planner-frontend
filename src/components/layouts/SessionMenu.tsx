@@ -85,6 +85,24 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
   
+  // Weight conversion helpers
+  const weightUnit = user?.weight_unit || 'kg';
+  const kgToLbs = (kg: number) => kg * 2.20462;
+  const lbsToKg = (lbs: number) => lbs / 2.20462;
+  
+  const convertWeight = (weight: number, toDisplay: boolean = true) => {
+    if (toDisplay) {
+      return weightUnit === 'lbs' ? kgToLbs(weight) : weight;
+    } else {
+      return weightUnit === 'lbs' ? lbsToKg(weight) : weight;
+    }
+  };
+  
+  const formatWeight = (weight: number) => {
+    const displayed = convertWeight(weight, true);
+    return `${displayed.toFixed(1)} ${weightUnit}`;
+  };
+  
   const [exercises, setExercises] = useState<ExerciseFromDB[]>([]);
   const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
   const [isLoadingExercises, setIsLoadingExercises] = useState(false);
@@ -243,8 +261,10 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
 
     const formattedExercises: Exercise[] = template.template_exercises.map(te => {
       const numSets = te.sets;
+      const templateWeight = te.weight || 0;
+      
       const setsData: ExerciseSet[] = Array.from({ length: numSets }, () => ({
-        weight: te.weight || 0,
+        weight: templateWeight,
         reps: te.reps,
         completed: false
       }));
@@ -256,7 +276,7 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
         muscle_group: te.exercises.muscle_group,
         sets: numSets,
         reps: te.reps,
-        weight: te.weight || 0,
+        weight: templateWeight,
         rest_seconds: te.rest_seconds,
         notes: te.notes,
         setsData,
@@ -337,10 +357,20 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
         if (ex.id !== exerciseId) return ex;
 
         const newSetsData = [...ex.setsData];
-        newSetsData[setIndex] = {
-          ...newSetsData[setIndex],
-          [field]: value
-        };
+        
+        if (field === 'weight') {
+          // Convert display value to kg for storage
+          const weightInKg = convertWeight(value, false);
+          newSetsData[setIndex] = {
+            ...newSetsData[setIndex],
+            weight: weightInKg
+          };
+        } else {
+          newSetsData[setIndex] = {
+            ...newSetsData[setIndex],
+            [field]: value
+          };
+        }
 
         return { ...ex, setsData: newSetsData };
       })
@@ -358,8 +388,7 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
           completed: !newSetsData[setIndex].completed
         };
 
-        // If marked as complete AND it's not the last set, automatically advance
-        const isMarkingComplete = !newSetsData[setIndex].completed === false;
+        const isMarkingComplete = newSetsData[setIndex].completed;
         const isLastSet = setIndex === ex.setsData.length - 1;
         const shouldAdvance = isMarkingComplete && !isLastSet;
 
@@ -399,6 +428,7 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
 
       for (let i = 0; i < selectedExercises.length; i++) {
         const ex = selectedExercises[i];
+        // Weight is stored in kg
         const avgWeight = ex.setsData.reduce((sum, s) => sum + s.weight, 0) / ex.setsData.length;
         const avgReps = Math.round(ex.setsData.reduce((sum, s) => sum + s.reps, 0) / ex.setsData.length);
 
@@ -467,9 +497,6 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      console.log('Creating workout for user:', user.id);
-
-      // Creates the workout
       const { data: workoutData, error: workoutError } = await supabase
         .from('workouts')
         .insert({
@@ -480,42 +507,18 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
         .select()
         .single();
 
-      if (workoutError) {
-        console.error('Error creating workout:', workoutError);
-        throw workoutError;
-      }
+      if (workoutError) throw workoutError;
 
-      console.log('Workout created:', workoutData);
-
-      // Counter for completed sets
       let totalCompletedSets = 0;
 
-      // Iterate over exercises
       for (const ex of selectedExercises) {
-        console.log(`Processing exercise: ${ex.name}`);
-        
-        // Filter only completed sets
         const completedSets = ex.setsData.filter(set => set.completed);
-        
-        console.log(`Completed sets for ${ex.name}:`, completedSets.length, 'of', ex.setsData.length);
 
-        // Only insert if there is at least 1 completed set
-        if (completedSets.length === 0) {
-          console.log(`Skipping ${ex.name} - no completed sets`);
-          continue;
-        }
+        if (completedSets.length === 0) continue;
 
-        // Insert only the completed sets
-        for (let i = 0; i < completedSets.length; i++) {
-          const setData = completedSets[i];
-          console.log(`Inserting completed set ${i + 1}:`, {
-            workout_id: workoutData.id,
-            exercise_id: ex.exercise_id,
-            weight: setData.weight,
-            reps: setData.reps
-          });
-
-          const { data: setInsertData, error: setError } = await supabase
+        for (const setData of completedSets) {
+          // Weight is already in kg
+          const { error: setError } = await supabase
             .from('workout_sets')
             .insert({
               workout_id: workoutData.id,
@@ -523,34 +526,13 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
               weight: setData.weight,
               reps: setData.reps,
               rpe: null
-            })
-            .select();
+            });
 
-          if (setError) {
-            console.error(`Error inserting set ${i + 1}:`, setError);
-            throw setError;
-          }
-
-          console.log(`Set ${i + 1} inserted:`, setInsertData);
+          if (setError) throw setError;
           totalCompletedSets++;
         }
       }
 
-      console.log(`Total completed sets inserted: ${totalCompletedSets}`);
-
-      // Check created PRs
-      const { data: prs, error: prsError } = await supabase
-        .from('exercise_personal_records')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (prsError) {
-        console.error('Error checking PRs:', prsError);
-      } else {
-        console.log('Personal Records after workout:', prs);
-      }
-
-      // Success message
       if (totalCompletedSets > 0) {
         setSuccessMessage(`Workout completed! ${totalCompletedSets} sets saved.`);
       } else {
@@ -559,7 +541,6 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
       
       setIsSuccessDialogOpen(true);
 
-      // Redirect after 1.5s
       setTimeout(() => {
         onFinish?.();
         navigate('/');
@@ -697,7 +678,7 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
                             </Badge>
                             {exercise.personalRecord && (
                               <Badge variant="outline" className="text-xs">
-                                PR: {exercise.personalRecord.max_weight}kg × {exercise.personalRecord.reps_at_max}
+                                PR: {formatWeight(exercise.personalRecord.max_weight)} × {exercise.personalRecord.reps_at_max}
                               </Badge>
                             )}
                           </div>
@@ -745,12 +726,13 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
                           <p className="text-sm font-medium">Set {exercise.selectedSet + 1} Details</p>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label className="text-xs text-muted-foreground">Weight (kg)</label>
+                              <label className="text-xs text-muted-foreground">Weight ({weightUnit})</label>
                               <Input
                                 type="number"
-                                value={exercise.setsData[exercise.selectedSet].weight}
+                                step="0.5"
+                                value={convertWeight(exercise.setsData[exercise.selectedSet].weight, true).toFixed(1)}
                                 onChange={e =>
-                                  updateSetData(exercise.id, exercise.selectedSet, 'weight', Number(e.target.value))
+                                  updateSetData(exercise.id, exercise.selectedSet, 'weight', parseFloat(e.target.value) || 0)
                                 }
                                 className="h-8"
                               />

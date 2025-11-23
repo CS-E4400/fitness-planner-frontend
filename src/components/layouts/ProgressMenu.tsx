@@ -41,6 +41,27 @@ const muscleGroupColors: Record<string, string> = {
 export default function ProgressMenu() {
   const { user } = useSelector((state: RootState) => state.auth);
   
+  const weightUnit = user?.weight_unit || 'kg';
+  
+  // Conversion helpers
+  const kgToLbs = (kg: number) => kg * 2.20462;
+  const lbsToKg = (lbs: number) => lbs / 2.20462;
+  
+  const convertWeight = (weight: number, toDisplay: boolean = true) => {
+    if (toDisplay) {
+      // Convert stored kg to display unit
+      return weightUnit === 'lbs' ? kgToLbs(weight) : weight;
+    } else {
+      // Convert display unit to kg for storage
+      return weightUnit === 'lbs' ? lbsToKg(weight) : weight;
+    }
+  };
+  
+  const formatWeight = (weight: number) => {
+    const displayed = convertWeight(weight, true);
+    return `${displayed.toFixed(1)} ${weightUnit}`;
+  };
+  
   const [weightRecords, setWeightRecords] = useState<WeightRecord[]>([]);
   const [personalRecords, setPersonalRecords] = useState<PersonalRecord[]>([]);
   const [isLoadingWeight, setIsLoadingWeight] = useState(false);
@@ -167,11 +188,14 @@ export default function ProgressMenu() {
     }
 
     try {
+      // Convert to kg for storage
+      const weightInKg = convertWeight(weight, false);
+      
       const { error } = await supabase
         .from('body_weight')
         .insert({
           user_id: user.id,
-          weight: weight,
+          weight: weightInKg,
           date: newWeightDate
         });
 
@@ -231,13 +255,13 @@ export default function ProgressMenu() {
         day: '2-digit', 
         month: 'short' 
       }),
-      weight: record.weight
+      weight: convertWeight(record.weight, true)
     }));
   };
 
   const getCurrentWeight = () => {
     if (weightRecords.length === 0) return null;
-    return weightRecords[weightRecords.length - 1].weight;
+    return convertWeight(weightRecords[weightRecords.length - 1].weight, true);
   };
 
   const getWeightChange = () => {
@@ -330,9 +354,10 @@ export default function ProgressMenu() {
                       style={{ fontSize: '12px' }}
                     />
                     <YAxis 
-                      domain={['dataMin - 1', 'dataMax + 1']}
                       stroke="hsl(var(--muted-foreground))"
                       style={{ fontSize: '12px' }}
+                      tickFormatter={(value) => `${value.toFixed(0)}`}
+                      domain={['auto', 'auto']}
                     />
                     <Tooltip 
                       contentStyle={{
@@ -340,6 +365,7 @@ export default function ProgressMenu() {
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
+                      formatter={(value: any) => [`${value.toFixed(1)} ${weightUnit}`, 'Weight']}
                     />
                     <Line 
                       type="monotone" 
@@ -358,7 +384,7 @@ export default function ProgressMenu() {
           <div className="grid grid-cols-2 gap-4">
             <Card className="p-4 text-center">
               <p className="text-2xl font-bold">
-                {currentWeight ? `${currentWeight} kg` : '--'}
+                {currentWeight ? `${currentWeight.toFixed(1)} ${weightUnit}` : '--'}
               </p>
               <p className="text-sm text-muted-foreground">Current Weight</p>
             </Card>
@@ -372,7 +398,7 @@ export default function ProgressMenu() {
                       <TrendingUp className="w-5 h-5 text-red-600" />
                     )}
                     <p className={`text-2xl font-bold ${weightChange < 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {weightChange > 0 ? '+' : ''}{weightChange.toFixed(1)} kg
+                      {weightChange > 0 ? '+' : ''}{weightChange.toFixed(1)} {weightUnit}
                     </p>
                   </div>
                   <p className="text-sm text-muted-foreground">This {periodLabels[timePeriod].toLowerCase()}</p>
@@ -408,7 +434,7 @@ export default function ProgressMenu() {
                         {lift.muscle_group}
                       </Badge>
                     </div>
-                    <p className="text-2xl font-bold">{lift.max_weight} kg</p>
+                    <p className="text-2xl font-bold">{formatWeight(lift.max_weight)}</p>
                     <p className="text-sm text-muted-foreground">
                       {lift.reps_at_max} {lift.reps_at_max === 1 ? 'rep' : 'reps'}
                     </p>
@@ -451,6 +477,17 @@ export default function ProgressMenu() {
               </div>
             </div>
           </Card>
+
+          {(workoutCount > 0 || mealCount > 0) && (
+            <Card className="p-6 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-800">
+              <div className="space-y-2">
+                <h3 className="font-semibold text-green-900 dark:text-green-100">🎉 Great Job!</h3>
+                <p className="text-sm text-green-800 dark:text-green-200">
+                  You're staying consistent this week. Keep up the excellent work!
+                </p>
+              </div>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 
