@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
@@ -9,19 +9,11 @@ import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianG
 import { Plus, TrendingDown, TrendingUp, Calendar } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
-import { supabase } from '@/lib/supabase';
+import { useGetMealsQuery } from '@/redux/api/mealsApi';
+import { useGetWorkoutsQuery } from '@/redux/api/workoutsApi';
+import { useGetPersonalRecordsQuery } from '@/redux/api/personalRecordsApi';
+import { useGetBodyWeightQuery, useLogBodyWeightMutation } from '@/redux/api/bodyWeightApi';
 
-interface WeightRecord {
-  id: string;
-  weight: number;
-  date: string;
-}
-
-interface PersonalRecord {
-  exercise_name: string;
-  max_weight: number;
-  reps_at_max: number;
-}
 
 type TimePeriod = 'week' | 'month' | 'quarter' | 'semester' | 'year';
 
@@ -40,121 +32,49 @@ const muscleGroupColors: Record<string, string> = {
 
 export default function ProgressMenu() {
   const { user } = useSelector((state: RootState) => state.auth);
-  
-  const [weightRecords, setWeightRecords] = useState<WeightRecord[]>([]);
-  const [personalRecords, setPersonalRecords] = useState<PersonalRecord[]>([]);
-  const [isLoadingWeight, setIsLoadingWeight] = useState(false);
-  const [isLoadingPRs, setIsLoadingPRs] = useState(false);
-  
+
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('month');
   const [isAddWeightOpen, setIsAddWeightOpen] = useState(false);
   const [newWeight, setNewWeight] = useState('');
   const [newWeightDate, setNewWeightDate] = useState(new Date().toISOString().split('T')[0]);
-  
-  const [workoutCount, setWorkoutCount] = useState(0);
-  const [mealCount, setMealCount] = useState(0);
-  
+
   const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false);
   const [dialogMessage, setDialogMessage] = useState('');
 
-  useEffect(() => {
-    if (user?.id) {
-      loadWeightRecords();
-      loadPersonalRecords();
-      loadWeeklyStats();
-    }
-  }, [user]);
-
-  const loadWeightRecords = async () => {
-    if (!user?.id) return;
-
-    setIsLoadingWeight(true);
-    try {
-      const { data, error } = await supabase
-        .from('body_weight')
-        .select('id, weight, date')
-        .eq('user_id', user.id)
-        .order('date', { ascending: true });
-
-      if (error) throw error;
-      setWeightRecords(data || []);
-    } catch (error) {
-      console.error('Error loading weight records:', error);
-    } finally {
-      setIsLoadingWeight(false);
-    }
-  };
-
-  const loadPersonalRecords = async () => {
-    if (!user?.id) return;
-
-    setIsLoadingPRs(true);
-    try {
-      const { data, error } = await supabase
-        .from('exercise_personal_records')
-        .select(`
-          max_weight,
-          reps_at_max,
-          exercises (
-            name,
-            muscle_group
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('max_weight', { ascending: false })
-        .limit(8);
-
-      if (error) throw error;
-
-      const formattedRecords: PersonalRecord[] = (data || []).map((record: any) => ({
-        exercise_name: record.exercises.name,
-        muscle_group: record.exercises.muscle_group,
-        max_weight: record.max_weight,
-        reps_at_max: record.reps_at_max
-      }));
-
-      setPersonalRecords(formattedRecords);
-    } catch (error) {
-      console.error('Error loading personal records:', error);
-    } finally {
-      setIsLoadingPRs(false);
-    }
-  };
-
-  const loadWeeklyStats = async () => {
-    if (!user?.id) return;
-
+  const dateRange = useMemo(() => {
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
 
-    try {
-      // Workouts esta semana
-      const { data: workouts, error: workoutError } = await supabase
-        .from('workouts')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_final', true)
-        .gte('date', startOfWeek.toISOString().split('T')[0]);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
 
-      if (workoutError) throw workoutError;
-      setWorkoutCount(workouts?.length || 0);
+    return {
+      startDate: startOfWeek.toISOString(),
+      endDate: endOfWeek.toISOString()
+    };
+  }, []);
 
-      // Meals esta semana
-      const { data: meals, error: mealError } = await supabase
-        .from('meals')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_final', true)
-        .gte('date', startOfWeek.toISOString().split('T')[0]);
+  const { data: meals } = useGetMealsQuery(dateRange, { skip: !user?.id });
+  const { data: workouts } = useGetWorkoutsQuery({ startDate: dateRange.startDate.split('T')[0] }, { skip: !user?.id });
+  const { data: prs, isLoading: isLoadingPRs } = useGetPersonalRecordsQuery(undefined, { skip: !user?.id });
+  const { data: weightRecordsData, isLoading: isLoadingWeight } = useGetBodyWeightQuery(undefined, { skip: !user?.id });
+  const [logBodyWeight] = useLogBodyWeightMutation();
 
-      if (mealError) throw mealError;
-      setMealCount(meals?.length || 0);
-    } catch (error) {
-      console.error('Error loading weekly stats:', error);
-    }
-  };
+  const mealCount = meals?.length || 0;
+  const workoutCount = workouts?.length || 0;
+  const weightRecords = weightRecordsData || [];
+
+  const personalRecords = useMemo(() => {
+    return (prs || []).map((record: any) => ({
+      exercise_name: record.exercise?.name || 'Unknown Exercise',
+      muscle_group: record.exercise?.muscle_group || 'Unknown',
+      max_weight: record.max_weight,
+      reps_at_max: record.reps_at_max
+    }));
+  }, [prs]);
 
   const handleAddWeight = async () => {
     if (!user?.id || !newWeight) return;
@@ -167,32 +87,24 @@ export default function ProgressMenu() {
     }
 
     try {
-      const { error } = await supabase
-        .from('body_weight')
-        .insert({
-          user_id: user.id,
-          weight: weight,
-          date: newWeightDate
-        });
+      await logBodyWeight({
+        weight: weight,
+        date: newWeightDate
+      }).unwrap();
 
-      if (error) {
-        if (error.code === '23505') {
-          setDialogMessage('You already have a weight record for this date');
-        } else {
-          throw error;
-        }
-      } else {
-        setDialogMessage('Weight added successfully!');
-        setNewWeight('');
-        setNewWeightDate(new Date().toISOString().split('T')[0]);
-        loadWeightRecords();
-      }
-      
+      setDialogMessage('Weight added successfully!');
+      setNewWeight('');
+      setNewWeightDate(new Date().toISOString().split('T')[0]);
+
       setIsSuccessDialogOpen(true);
       setIsAddWeightOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding weight:', error);
-      setDialogMessage('Error adding weight. Please try again.');
+      if (error.data?.message?.includes('duplicate key') || error.data?.message?.includes('23505') || error.message?.includes('duplicate key')) {
+        setDialogMessage('You already have a weight record for this date');
+      } else {
+        setDialogMessage('Error adding weight. Please try again.');
+      }
       setIsSuccessDialogOpen(true);
     }
   };
@@ -227,9 +139,9 @@ export default function ProgressMenu() {
     });
 
     return filtered.map(record => ({
-      date: new Date(record.date).toLocaleDateString('en-GB', { 
-        day: '2-digit', 
-        month: 'short' 
+      date: new Date(record.date).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short'
       }),
       weight: record.weight
     }));
@@ -243,7 +155,7 @@ export default function ProgressMenu() {
   const getWeightChange = () => {
     const filtered = getFilteredWeightData();
     if (filtered.length < 2) return null;
-    
+
     const firstWeight = filtered[0].weight;
     const lastWeight = filtered[filtered.length - 1].weight;
     return lastWeight - firstWeight;
@@ -324,27 +236,27 @@ export default function ProgressMenu() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="date" 
+                    <XAxis
+                      dataKey="date"
                       stroke="hsl(var(--muted-foreground))"
                       style={{ fontSize: '12px' }}
                     />
-                    <YAxis 
+                    <YAxis
                       domain={['dataMin - 1', 'dataMax + 1']}
                       stroke="hsl(var(--muted-foreground))"
                       style={{ fontSize: '12px' }}
                     />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{
                         backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
                     />
-                    <Line 
-                      type="monotone" 
-                      dataKey="weight" 
-                      stroke="hsl(var(--primary))" 
+                    <Line
+                      type="monotone"
+                      dataKey="weight"
+                      stroke="hsl(var(--primary))"
                       strokeWidth={2}
                       dot={{ fill: 'hsl(var(--primary))' }}
                     />
@@ -353,7 +265,7 @@ export default function ProgressMenu() {
               </div>
             )}
           </Card>
-          
+
           {/* Weight Stats */}
           <div className="grid grid-cols-2 gap-4">
             <Card className="p-4 text-center">
@@ -430,7 +342,7 @@ export default function ProgressMenu() {
               <p className="text-sm text-muted-foreground mt-2">Meals Logged This Week</p>
             </Card>
           </div>
-          
+
           <Card className="p-6">
             <div className="flex items-center gap-2 mb-4">
               <Calendar className="w-5 h-5 text-primary" />

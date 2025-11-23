@@ -3,14 +3,14 @@ export interface Workout {
   user_id: string;
   name: string;
   description?: string;
-  exercises: Exercise[];
+  exercises: WorkoutExercise[];
   duration_minutes?: number;
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   created_at: string;
   updated_at: string;
 }
 
-export interface Exercise {
+export interface WorkoutExercise {
   id: string;
   name: string;
   sets: number;
@@ -23,11 +23,56 @@ export interface Exercise {
 export interface CreateWorkoutRequest {
   name: string;
   description?: string;
-  exercises: Omit<Exercise, 'id'>[];
+  exercises: Omit<WorkoutExercise, 'id'>[];
   duration_minutes?: number;
   difficulty: Workout['difficulty'];
 }
 
 export interface UpdateWorkoutRequest extends Partial<CreateWorkoutRequest> {
   id: string;
+}
+
+export interface ExerciseFromDB {
+  id: string;
+  name: string;
+  muscle_group: string;
+  equipment?: string;
+  video_url?: string;
+  instructions?: string;
+}
+
+export interface WorkoutTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  is_public: boolean;
+  template_exercises: Array<{
+    id: string;
+    exercise_id: string;
+    sets: number;
+    reps: number;
+    weight?: number;
+    rest_seconds?: number;
+    notes?: string;
+    order_index: number;
+    exercise: {
+      id: string;
+      name: string;
+      muscle_group: string;
+    };
+  }>;
+}
+
+export interface CreateWorkoutTemplateRequest {
+  name: string;
+  description?: string;
+  exercises: Array<{
+    exercise_id: string;
+    sets: number;
+    reps: number;
+    weight?: number;
+    rest_seconds?: number;
+    notes?: string;
+    order_index: number;
+  }>;
 }

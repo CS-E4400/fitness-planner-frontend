@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { ArrowLeft, Camera } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
@@ -9,29 +9,39 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '@/redux/store';
-import { supabase } from '@/lib/supabase';
+import { useGetProfileQuery, useUpdateProfileMutation, useCheckUsernameMutation } from '@/redux/api/usersApi';
 import { getSession } from '@/redux/features/authSlice';
 
 export default function ProfileSettings() {
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  
+
+  const { data: userProfile } = useGetProfileQuery();
+  const [updateProfile, { isLoading: isUpdating }] = useUpdateProfileMutation();
+  const [checkUsername] = useCheckUsernameMutation();
+
   const [name, setName] = useState(user?.name || '');
-  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
+  const [avatarUrl] = useState(user?.avatar_url || '');
   const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  
+
   const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false);
   const [dialogMessage, setDialogMessage] = useState('');
   const [isError, setIsError] = useState(false);
 
+  // Update local state when user profile is loaded
+  useEffect(() => {
+    if (userProfile?.name) {
+      setName(userProfile.name);
+    }
+  }, [userProfile]);
+
   const email = user?.email || '';
 
-  const initials = name
+  const initials = (name || user?.name || '')
     .split(' ')
-    .filter(n => n.length > 0)
-    .map(n => n[0])
+    .filter((n: string) => n.length > 0)
+    .map((n: string) => n[0])
     .join('')
     .toUpperCase()
     .slice(0, 2);
@@ -44,36 +54,23 @@ export default function ProfileSettings() {
       return;
     }
 
-    setIsSaving(true);
-
     try {
-      // Verifica se já existe outro usuário com esse nome
-      const { data: existingUser, error: checkError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('name', name.trim())
-        .neq('id', user.id)
-        .maybeSingle();
+      // Check username availability
+      const { available } = await checkUsername(name.trim()).unwrap();
 
-      if (checkError) throw checkError;
-
-      if (existingUser) {
+      if (!available) {
         setDialogMessage('This name is already taken. Please choose another one.');
         setIsError(true);
         setIsSuccessDialogOpen(true);
-        setIsSaving(false);
         return;
       }
 
-      // Atualiza o nome na tabela users
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ name: name.trim() })
-        .eq('id', user.id);
+      // Update profile
+      await updateProfile({
+        name: name.trim()
+      }).unwrap();
 
-      if (updateError) throw updateError;
-
-      // Atualiza a sessão no Redux
+      // Refresh session data
       await dispatch(getSession());
 
       setIsEditing(false);
@@ -82,20 +79,10 @@ export default function ProfileSettings() {
       setIsSuccessDialogOpen(true);
     } catch (error: any) {
       console.error('Error updating profile:', error);
-      setDialogMessage(error.message || 'Error updating profile. Please try again.');
+      setDialogMessage(error.data?.message || error.message || 'Error updating profile. Please try again.');
       setIsError(true);
       setIsSuccessDialogOpen(true);
-    } finally {
-      setIsSaving(false);
     }
-  };
-
-  const handleAvatarChange = () => {
-    // Aqui você implementaria o upload de imagem
-    console.log('Change avatar clicked');
-    setDialogMessage('Avatar upload not yet implemented');
-    setIsError(false);
-    setIsSuccessDialogOpen(true);
   };
 
   return (
@@ -127,7 +114,7 @@ export default function ProfileSettings() {
             {/* Personal Information */}
             <div className="space-y-4">
               <h3 className="font-medium">Personal Information</h3>
-              
+
               <div className="space-y-2">
                 <label className="text-sm font-medium">Name</label>
                 <Input
@@ -166,16 +153,16 @@ export default function ProfileSettings() {
                       setIsEditing(false);
                       setName(user?.name || '');
                     }}
-                    disabled={isSaving}
+                    disabled={isUpdating}
                   >
                     Cancel
                   </Button>
                   <Button
                     className="flex-1"
                     onClick={handleSave}
-                    disabled={isSaving || !name.trim()}
+                    disabled={isUpdating || !name.trim()}
                   >
-                    {isSaving ? 'Saving...' : 'Save Changes'}
+                    {isUpdating ? 'Saving...' : 'Save Changes'}
                   </Button>
                 </>
               ) : (
