@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { Plus, Search, X, Save, Edit2, Trash2, Check } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -5,11 +8,12 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
-import { supabase } from '@/lib/supabase';
+import { useGetExercisesQuery } from '@/redux/api/exercisesApi';
+import { useGetTemplatesQuery, useCreateTemplateMutation, useDeleteTemplateMutation } from '@/redux/api/workoutTemplatesApi';
+import { useCreateWorkoutMutation } from '@/redux/api/workoutsApi';
+import { useGetPersonalRecordsQuery } from '@/redux/api/personalRecordsApi';
+import { ExerciseFromDB, WorkoutTemplate } from '@/types';
 
 interface ExerciseSet {
   weight: number;
@@ -35,34 +39,6 @@ interface Exercise {
   };
 }
 
-interface WorkoutTemplate {
-  id: string;
-  name: string;
-  description?: string;
-  is_public: boolean;
-  template_exercises: Array<{
-    id: string;
-    exercise_id: string;
-    sets: number;
-    reps: number;
-    weight?: number;
-    rest_seconds?: number;
-    notes?: string;
-    order_index: number;
-    exercises: {
-      id: string;
-      name: string;
-      muscle_group: string;
-    };
-  }>;
-}
-
-interface ExerciseFromDB {
-  id: string;
-  name: string;
-  muscle_group: string;
-}
-
 const muscleGroupColors: Record<string, string> = {
   Chest: "bg-red-200 text-red-800",
   Back: "bg-blue-200 text-blue-800",
@@ -84,12 +60,12 @@ interface SessionMenuProps {
 export default function SessionMenu({ onFinish }: SessionMenuProps) {
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
-  
+
   // Weight conversion helpers
   const weightUnit = user?.weight_unit || 'kg';
   const kgToLbs = (kg: number) => kg * 2.20462;
   const lbsToKg = (lbs: number) => lbs / 2.20462;
-  
+
   const convertWeight = (weight: number, toDisplay: boolean = true) => {
     if (toDisplay) {
       return weightUnit === 'lbs' ? kgToLbs(weight) : weight;
@@ -97,22 +73,27 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
       return weightUnit === 'lbs' ? lbsToKg(weight) : weight;
     }
   };
-  
+
   const formatWeight = (weight: number) => {
     const displayed = convertWeight(weight, true);
     return `${displayed.toFixed(1)} ${weightUnit}`;
   };
-  
-  const [exercises, setExercises] = useState<ExerciseFromDB[]>([]);
+
+  // RTK Query hooks
+  const { data: exercises = [], isLoading: isLoadingExercises } = useGetExercisesQuery();
+  const { data: publicTemplates = [], isLoading: isLoadingPublicTemplates } = useGetTemplatesQuery({ public: true });
+  const { data: userTemplates = [], isLoading: isLoadingUserTemplates } = useGetTemplatesQuery({ public: false });
+  const { data: personalRecords = [] } = useGetPersonalRecordsQuery();
+
+  const [createWorkout] = useCreateWorkoutMutation();
+  const [createTemplate] = useCreateTemplateMutation();
+  const [deleteTemplate] = useDeleteTemplateMutation();
   const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
-  const [isLoadingExercises, setIsLoadingExercises] = useState(false);
   const [isAddExerciseOpen, setIsAddExerciseOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  
-  const [publicTemplates, setPublicTemplates] = useState<WorkoutTemplate[]>([]);
-  const [userTemplates, setUserTemplates] = useState<WorkoutTemplate[]>([]);
-  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
-  
+
+  const isLoadingTemplates = isLoadingPublicTemplates || isLoadingUserTemplates;
+
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false);
@@ -122,147 +103,20 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
   const [templateDescription, setTemplateDescription] = useState('');
   const [activeTab, setActiveTab] = useState('create');
 
-  useEffect(() => {
-    loadExercises();
-    loadTemplates();
-  }, []);
+  // Create PR map for easy lookup
+  const prMap = personalRecords.reduce((acc: Record<string, any>, pr: any) => {
+    acc[pr.exercise_id] = {
+      max_weight: pr.max_weight,
+      reps_at_max: pr.reps_at_max
+    };
+    return acc;
+  }, {});
 
-  useEffect(() => {
-    if (user) {
-      loadTemplates();
-    }
-  }, [user]);
-
-  const loadExercises = async () => {
-    setIsLoadingExercises(true);
-    try {
-      const { data, error } = await supabase
-        .from('exercises')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
-      setExercises(data || []);
-    } catch (error) {
-      console.error('Error loading exercises:', error);
-    } finally {
-      setIsLoadingExercises(false);
-    }
-  };
-
-  const loadPersonalRecords = async (exerciseIds: string[]) => {
-    if (!user?.id || exerciseIds.length === 0) return {};
-
-    try {
-      const { data, error } = await supabase
-        .from('exercise_personal_records')
-        .select('*')
-        .eq('user_id', user.id)
-        .in('exercise_id', exerciseIds);
-
-      if (error) throw error;
-
-      const prMap: Record<string, any> = {};
-      data?.forEach(pr => {
-        prMap[pr.exercise_id] = {
-          max_weight: pr.max_weight,
-          reps_at_max: pr.reps_at_max
-        };
-      });
-
-      return prMap;
-    } catch (error) {
-      console.error('Error loading personal records:', error);
-      return {};
-    }
-  };
-
-  const loadTemplates = async () => {
-    setIsLoadingTemplates(true);
-    try {
-      const { data: publicData, error: publicError } = await supabase
-        .from('workout_templates')
-        .select(`
-          id,
-          name,
-          description,
-          is_public,
-          template_exercises (
-            id,
-            exercise_id,
-            sets,
-            reps,
-            weight,
-            rest_seconds,
-            notes,
-            order_index,
-            exercises (
-              id,
-              name,
-              muscle_group
-            )
-          )
-        `)
-        .eq('is_public', true)
-        .order('name');
-
-      if (publicError) throw publicError;
-
-      if (user) {
-        const { data: userData, error: userError } = await supabase
-          .from('workout_templates')
-          .select(`
-            id,
-            name,
-            description,
-            is_public,
-            template_exercises (
-              id,
-              exercise_id,
-              sets,
-              reps,
-              weight,
-              rest_seconds,
-              notes,
-              order_index,
-              exercises (
-                id,
-                name,
-                muscle_group
-              )
-            )
-          `)
-          .eq('user_id', user.id)
-          .eq('is_public', false)
-          .order('name');
-
-        if (userError) throw userError;
-        setUserTemplates(formatTemplates(userData || []));
-      }
-
-      setPublicTemplates(formatTemplates(publicData || []));
-    } catch (error) {
-      console.error('Error loading templates:', error);
-    } finally {
-      setIsLoadingTemplates(false);
-    }
-  };
-
-  const formatTemplates = (data: any[]): WorkoutTemplate[] => {
-    return data.map(template => ({
-      ...template,
-      template_exercises: (template.template_exercises || []).sort((a: any, b: any) => a.order_index - b.order_index)
-    }));
-  };
-
-  const loadTemplate = async (template: WorkoutTemplate) => {
-    const exerciseIds = template.template_exercises.map(te => te.exercise_id);
-    const prs = await loadPersonalRecords(exerciseIds);
-
+  const loadTemplate = (template: WorkoutTemplate) => {
     const formattedExercises: Exercise[] = template.template_exercises.map(te => {
       const numSets = te.sets;
       const templateWeight = te.weight || 0;
-      
+
       const setsData: ExerciseSet[] = Array.from({ length: numSets }, () => ({
         weight: templateWeight,
         reps: te.reps,
@@ -272,8 +126,8 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
       return {
         id: `temp_${Date.now()}_${te.id}`,
         exercise_id: te.exercise_id,
-        name: te.exercises.name,
-        muscle_group: te.exercises.muscle_group,
+        name: te.exercise?.name || 'Unknown Exercise',
+        muscle_group: te.exercise?.muscle_group || 'Unknown',
         sets: numSets,
         reps: te.reps,
         weight: templateWeight,
@@ -281,17 +135,15 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
         notes: te.notes,
         setsData,
         selectedSet: 0,
-        personalRecord: prs[te.exercise_id]
+        personalRecord: prMap[te.exercise_id]
       };
     });
-    
+
     setSelectedExercises(formattedExercises);
     setActiveTab('create');
   };
 
-  const addExerciseToWorkout = async (exercise: ExerciseFromDB) => {
-    const prs = await loadPersonalRecords([exercise.id]);
-
+  const addExerciseToWorkout = (exercise: ExerciseFromDB) => {
     const setsData: ExerciseSet[] = Array.from({ length: 3 }, () => ({
       weight: 0,
       reps: 10,
@@ -310,7 +162,7 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
       notes: '',
       setsData,
       selectedSet: 0,
-      personalRecord: prs[exercise.id]
+      personalRecord: prMap[exercise.id]
     };
 
     setSelectedExercises(prev => [...prev, newExercise]);
@@ -357,7 +209,7 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
         if (ex.id !== exerciseId) return ex;
 
         const newSetsData = [...ex.setsData];
-        
+
         if (field === 'weight') {
           // Convert display value to kg for storage
           const weightInKg = convertWeight(value, false);
@@ -413,29 +265,13 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
     if (!user?.id || !templateName.trim() || selectedExercises.length === 0) return;
 
     try {
-      const { data: templateData, error: templateError } = await supabase
-        .from('workout_templates')
-        .insert({
-          user_id: user.id,
-          name: templateName,
-          description: templateDescription,
-          is_public: false
-        })
-        .select()
-        .single();
-
-      if (templateError) throw templateError;
-
-      for (let i = 0; i < selectedExercises.length; i++) {
-        const ex = selectedExercises[i];
-        // Weight is stored in kg
-        const avgWeight = ex.setsData.reduce((sum, s) => sum + s.weight, 0) / ex.setsData.length;
-        const avgReps = Math.round(ex.setsData.reduce((sum, s) => sum + s.reps, 0) / ex.setsData.length);
-
-        const { error: teError } = await supabase
-          .from('template_exercises')
-          .insert({
-            template_id: templateData.id,
+      await createTemplate({
+        name: templateName,
+        description: templateDescription,
+        exercises: selectedExercises.map((ex, i) => {
+          const avgWeight = ex.setsData.reduce((sum, s) => sum + s.weight, 0) / ex.setsData.length;
+          const avgReps = Math.round(ex.setsData.reduce((sum, s) => sum + s.reps, 0) / ex.setsData.length);
+          return {
             exercise_id: ex.exercise_id,
             sets: ex.sets,
             reps: avgReps,
@@ -443,21 +279,19 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
             rest_seconds: ex.rest_seconds,
             notes: ex.notes,
             order_index: i + 1
-          });
-
-        if (teError) throw teError;
-      }
+          };
+        })
+      }).unwrap();
 
       setIsSaveDialogOpen(false);
       setTemplateName('');
       setTemplateDescription('');
-      loadTemplates();
-      
+
       setSuccessMessage('Workout template saved successfully!');
       setIsSuccessDialogOpen(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving template:', error);
-      setSuccessMessage('Error saving template. Please try again.');
+      setSuccessMessage(error.data?.message || error.message || 'Error saving template. Please try again.');
       setIsSuccessDialogOpen(true);
     }
   };
@@ -467,26 +301,21 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
     setIsDeleteDialogOpen(true);
   };
 
+
   const confirmDeleteTemplate = async () => {
     if (!templateToDelete) return;
 
     try {
-      const { error } = await supabase
-        .from('workout_templates')
-        .delete()
-        .eq('id', templateToDelete);
-
-      if (error) throw error;
+      await deleteTemplate(templateToDelete).unwrap();
 
       setIsDeleteDialogOpen(false);
       setTemplateToDelete(null);
-      loadTemplates();
-      
+
       setSuccessMessage('Workout template deleted successfully!');
       setIsSuccessDialogOpen(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting template:', error);
-      setSuccessMessage('Error deleting template. Please try again.');
+      setSuccessMessage(error.data?.message || error.message || 'Error deleting template. Please try again.');
       setIsSuccessDialogOpen(true);
     }
   };
@@ -495,59 +324,39 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
     if (!user?.id || selectedExercises.length === 0) return;
 
     try {
-      const today = new Date().toISOString().split('T')[0];
-
-      const { data: workoutData, error: workoutError } = await supabase
-        .from('workouts')
-        .insert({
-          user_id: user.id,
-          date: today,
-          is_final: true
-        })
-        .select()
-        .single();
-
-      if (workoutError) throw workoutError;
-
-      let totalCompletedSets = 0;
-
-      for (const ex of selectedExercises) {
+      const exercisesToSave = selectedExercises.map(ex => {
         const completedSets = ex.setsData.filter(set => set.completed);
+        if (completedSets.length === 0) return null;
 
-        if (completedSets.length === 0) continue;
+        return {
+          exercise_id: ex.exercise_id,
+          sets_data: completedSets.map(s => ({
+            weight: s.weight,
+            reps: s.reps
+          }))
+        };
+      }).filter(Boolean);
 
-        for (const setData of completedSets) {
-          // Weight is already in kg
-          const { error: setError } = await supabase
-            .from('workout_sets')
-            .insert({
-              workout_id: workoutData.id,
-              exercise_id: ex.exercise_id,
-              weight: setData.weight,
-              reps: setData.reps,
-              rpe: null
-            });
-
-          if (setError) throw setError;
-          totalCompletedSets++;
-        }
+      if (exercisesToSave.length === 0) {
+        setSuccessMessage('No completed sets to save.');
+        setIsSuccessDialogOpen(true);
+        return;
       }
 
-      if (totalCompletedSets > 0) {
-        setSuccessMessage(`Workout completed! ${totalCompletedSets} sets saved.`);
-      } else {
-        setSuccessMessage('Workout saved, but no sets were marked as completed.');
-      }
-      
+      await createWorkout({
+        exercises: exercisesToSave as any
+      }).unwrap();
+
+      setSuccessMessage('Workout completed successfully!');
       setIsSuccessDialogOpen(true);
 
       setTimeout(() => {
         onFinish?.();
         navigate('/');
       }, 1500);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error finishing workout:', error);
-      setSuccessMessage('Error saving workout. Please try again.');
+      setSuccessMessage(error.data?.message || error.message || 'Error saving workout. Please try again.');
       setIsSuccessDialogOpen(true);
     }
   };

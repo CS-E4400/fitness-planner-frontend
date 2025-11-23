@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
 import { supabase } from '@/lib/supabase'
+import { apiSlice } from '@/redux/api/apiSlice'
 import { AuthState, User, Session } from '@/types'
 import { AuthError } from '@supabase/supabase-js'
 
@@ -32,10 +33,11 @@ export const signInWithGoogle = createAsyncThunk(
 
 export const signOut = createAsyncThunk(
   'auth/signOut',
-  async (_, { rejectWithValue }) => {
+  async (_, { dispatch, rejectWithValue }) => {
     try {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
+      dispatch(apiSlice.util.resetApiState())
     } catch (error) {
       return rejectWithValue((error as AuthError).message)
     }
@@ -48,22 +50,30 @@ export const getSession = createAsyncThunk(
     try {
       const { data: { session }, error } = await supabase.auth.getSession()
       if (error) throw error
-      
+
       if (!session) return null
 
-      // Search additional data from the users table
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('name, avatar_url, weight_unit')
-        .eq('id', session.user.id)
-        .maybeSingle()
+      // Fetch user profile from backend (creates if not exists)
+      // We use fetch directly here because the session is not yet in the Redux store,
+      // so apiSlice (which relies on getState().auth.session) would fail with 401.
+      let userData = null
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+        const response = await fetch(`${API_BASE_URL}/api/users/me`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        })
 
-      if (userError && userError.code !== 'PGRST116') {
-        // PGRST116 = no rows returned (user does not have a record in users yet)
-        console.error('Error fetching user data:', userError)
+        if (response.ok) {
+          const result = await response.json()
+          userData = result.data
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error)
       }
 
-      // Merge data from auth.users with public.users
+      // Merge data
       const enrichedUser: User = {
         id: session.user.id,
         email: session.user.email,
@@ -73,23 +83,6 @@ export const getSession = createAsyncThunk(
         created_at: session.user.created_at || new Date().toISOString(),
         updated_at: session.user.updated_at
       }
-
-      // Create record in users table if it doesn't exist
-      if (!userData) {
-        const { error: insertError } = await supabase
-          .from('users')
-          .insert({
-            id: session.user.id,
-            name: session.user.user_metadata?.name || null,
-            avatar_url: session.user.user_metadata?.avatar_url || null,
-            weight_unit: 'kg'
-          })
-
-        if (insertError) {
-          console.error('Error creating user record:', insertError)
-        }
-      }
-
       return {
         ...session,
         user: enrichedUser

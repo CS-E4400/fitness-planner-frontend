@@ -1,30 +1,8 @@
-import { useEffect, useState } from 'react'
 import { Button } from "@/components/ui/button"
-import { workoutApi } from '@/lib/api'
-import { Workout } from '@/types'
+import { useGetWorkoutsQuery } from '@/redux/api/workoutsApi'
 
 const Home = () => {
-  const [workouts, setWorkouts] = useState<Workout[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const fetchWorkouts = async () => {
-      try {
-        setLoading(true)
-        const response = await workoutApi.getWorkouts()
-        if (response.data) {
-          setWorkouts(response.data)
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch workouts')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchWorkouts()
-  }, [])
+  const { data: workouts = [], isLoading: loading, error } = useGetWorkoutsQuery()
 
   if (loading) {
     return (
@@ -42,7 +20,7 @@ const Home = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="text-center">
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {error}
+            {'status' in error ? `Error loading workouts (Status: ${error.status})` : error.message || 'Failed to fetch workouts'}
           </div>
         </div>
       </div>

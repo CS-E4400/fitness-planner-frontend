@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { User, Settings, Dumbbell, UtensilsCrossed, TrendingUp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -6,62 +5,24 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
-import { supabase } from '@/lib/supabase';
+import { useGetMealsQuery } from '@/redux/api/mealsApi';
+import { useGetWorkoutsQuery } from '@/redux/api/workoutsApi';
+import { useGetPersonalRecordsQuery } from '@/redux/api/personalRecordsApi';
 
 export default function AccountMenu() {
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
 
-  const [totalWorkouts, setTotalWorkouts] = useState(0);
-  const [totalMeals, setTotalMeals] = useState(0);
-  const [totalPRs, setTotalPRs] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data: meals, isLoading: isLoadingMeals } = useGetMealsQuery(undefined, { skip: !user?.id });
+  const { data: workouts, isLoading: isLoadingWorkouts } = useGetWorkoutsQuery(undefined, { skip: !user?.id });
+  const { data: prs, isLoading: isLoadingPRs } = useGetPersonalRecordsQuery(undefined, { skip: !user?.id });
 
-  useEffect(() => {
-    if (user?.id) {
-      loadStats();
-    }
-  }, [user]);
+  const totalMeals = meals?.length || 0;
+  const totalWorkouts = workouts?.length || 0;
+  const totalPRs = prs?.length || 0;
 
-  const loadStats = async () => {
-    if (!user?.id) return;
+  const isLoading = isLoadingMeals || isLoadingWorkouts || isLoadingPRs;
 
-    setIsLoading(true);
-    try {
-      // Total de workouts
-      const { data: workouts, error: workoutError } = await supabase
-        .from('workouts')
-        .select('id', { count: 'exact' })
-        .eq('user_id', user.id)
-        .eq('is_final', true);
-
-      if (workoutError) throw workoutError;
-      setTotalWorkouts(workouts?.length || 0);
-
-      // Total de meals
-      const { data: meals, error: mealError } = await supabase
-        .from('meals')
-        .select('id', { count: 'exact' })
-        .eq('user_id', user.id)
-        .eq('is_final', true);
-
-      if (mealError) throw mealError;
-      setTotalMeals(meals?.length || 0);
-
-      // Total de PRs
-      const { data: prs, error: prError } = await supabase
-        .from('exercise_personal_records')
-        .select('id', { count: 'exact' })
-        .eq('user_id', user.id);
-
-      if (prError) throw prError;
-      setTotalPRs(prs?.length || 0);
-    } catch (error) {
-      console.error('Error loading stats:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const initials = user?.name
     ?.split(' ')
@@ -70,7 +31,7 @@ export default function AccountMenu() {
     .join('')
     .toUpperCase()
     .slice(0, 2) || user?.email?.slice(0, 2).toUpperCase() || '??';
-  
+
   const displayName = user?.name || 'User';
   const displayEmail = user?.email || 'No email';
 
@@ -96,8 +57,8 @@ export default function AccountMenu() {
           <div className="flex-1">
             <h2 className="text-xl font-semibold">{displayName}</h2>
             <p className="text-sm text-muted-foreground">{displayEmail}</p>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               className="mt-3"
               onClick={handleProfileSettings}
@@ -197,16 +158,16 @@ export default function AccountMenu() {
       <div className="space-y-3">
         <h3 className="font-medium">Account</h3>
         <Card className="p-4 space-y-1">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className="w-full justify-start"
             onClick={handleProfileSettings}
           >
             <User className="w-4 h-4 mr-3" />
             Profile Settings
           </Button>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className="w-full justify-start"
             onClick={handleAppSettings}
           >

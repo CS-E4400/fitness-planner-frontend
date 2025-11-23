@@ -6,3 +6,6 @@ export * from './api';
 
 // Workout types
 export * from './workout';
+
+// Nutrition types
+export * from './nutrition';

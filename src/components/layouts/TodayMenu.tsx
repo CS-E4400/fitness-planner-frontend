@@ -1,68 +1,47 @@
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { Dumbbell, UtensilsCrossed, TrendingUp, Calendar } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
-import { supabase } from '@/lib/supabase';
+import { useGetMealsQuery } from '@/redux/api/mealsApi';
+import { useGetWorkoutsQuery } from '@/redux/api/workoutsApi';
 
 export default function TodayMenu() {
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
 
-  const [workoutCount, setWorkoutCount] = useState(0);
-  const [mealCount, setMealCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (user?.id) {
-      loadWeeklyStats();
-    }
-  }, [user]);
-
-  const loadWeeklyStats = async () => {
-    if (!user?.id) return;
-
-    setIsLoading(true);
+  const dateRange = useMemo(() => {
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
 
-    try {
-      // Workouts esta semana
-      const { data: workouts, error: workoutError } = await supabase
-        .from('workouts')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_final', true)
-        .gte('date', startOfWeek.toISOString().split('T')[0]);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
 
-      if (workoutError) throw workoutError;
-      setWorkoutCount(workouts?.length || 0);
+    return {
+      startDate: startOfWeek.toISOString(),
+      endDate: endOfWeek.toISOString()
+    };
+  }, []);
 
-      // Meals esta semana
-      const { data: meals, error: mealError } = await supabase
-        .from('meals')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_final', true)
-        .gte('date', startOfWeek.toISOString().split('T')[0]);
+  const { data: meals, isLoading: isLoadingMeals } = useGetMealsQuery(dateRange, { skip: !user?.id });
+  const { data: workouts, isLoading: isLoadingWorkouts } = useGetWorkoutsQuery({
+    startDate: dateRange.startDate.split('T')[0]
+  }, { skip: !user?.id });
 
-      if (mealError) throw mealError;
-      setMealCount(meals?.length || 0);
-    } catch (error) {
-      console.error('Error loading weekly stats:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const mealCount = meals?.length || 0;
+  const workoutCount = workouts?.length || 0;
 
-  const today = new Date().toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    month: 'long', 
-    day: 'numeric' 
+  const isLoading = isLoadingMeals || isLoadingWorkouts;
+
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric'
   });
 
   const greeting = () => {
@@ -87,7 +66,7 @@ export default function TodayMenu() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-3">
-        <Card 
+        <Card
           className="p-6 cursor-pointer hover:shadow-lg transition-all hover:scale-105"
           onClick={() => navigate('/session')}
         >
@@ -102,7 +81,7 @@ export default function TodayMenu() {
           </div>
         </Card>
 
-        <Card 
+        <Card
           className="p-6 cursor-pointer hover:shadow-lg transition-all hover:scale-105"
           onClick={() => navigate('/nutrition')}
         >
@@ -130,8 +109,8 @@ export default function TodayMenu() {
               <p className="text-sm text-muted-foreground">Track your journey</p>
             </div>
           </div>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             onClick={() => navigate('/progress')}
           >
