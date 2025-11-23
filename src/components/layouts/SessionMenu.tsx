@@ -539,7 +539,7 @@ export default function SessionMenu({ onFinish }: SessionMenuProps) {
                               <Input
                                 type="number"
                                 step="0.5"
-                                value={convertWeight(exercise.setsData[exercise.selectedSet].weight, true).toFixed(1)}
+                                value={convertWeight(exercise.setsData[exercise.selectedSet].weight, true)}
                                 onChange={e =>
                                   updateSetData(exercise.id, exercise.selectedSet, 'weight', parseFloat(e.target.value) || 0)
                                 }

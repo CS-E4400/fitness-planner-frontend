@@ -30,7 +30,10 @@ export const workoutsApi = apiSlice.injectEndpoints({
                 if ('data' in response) return (response as { data: Workout }).data;
                 return response as Workout;
             },
-            invalidatesTags: [{ type: 'Workout', id: 'LIST' }],
+            invalidatesTags: [
+                { type: 'Workout', id: 'LIST' },
+                'PersonalRecord'
+            ],
         }),
         updateWorkout: builder.mutation<Workout, UpdateWorkoutRequest>({
             query: ({ id, ...patch }) => ({
