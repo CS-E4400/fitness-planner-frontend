@@ -1,30 +1,60 @@
-# React + TypeScript + Vite
+# Fitness Planner - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern Single Page Application (SPA) built for tracking workouts, nutrition, and personal records. This project interacts with the Fitness Planner Backend via a RESTful API.
 
-Currently, two official plugins are available:
+## 🛠 Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Core:** React 18, TypeScript, Vite
+- **Styling:** TailwindCSS
+- **State Management:** Redux Toolkit (RTK) & RTK Query
+- **Runtime:** Bun
 
-## Expanding the ESLint configuration
+## ✨ Features
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+- **Authentication:** Secure login/signup via Supabase Auth (JWT).
+- **Analytics:** Visual progress tracking and personal record calculation.
+- **Templates:** Create and reuse workout structures.
+- **Responsive:** Mobile-first design using TailwindCSS.
 
-- Configure the top-level `parserOptions` property like this:
+## 🚀 Getting Started
 
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-  },
-}
+### Prerequisites
+- [Bun](https://bun.sh/) (v1.0 or higher) installed.
+
+### Installation
+
+**Clone the repository:**
+```bash
+git clone https://github.com/CS-E4400/fitness-planner-frontend.git
+cd fitness-planner-frontend
 ```
 
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+**Install dependencies:**
+```bash
+bun install
+```
+
+**Create a .env file in the root directory:**
+```bash
+VITE_API_BASE_URL=http://localhost:3000/api/v1
+
+VITE_SUPABASE_URL=your_supabase_url
+
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+**Run Development Server:**
+```bash
+bun run dev
+```
+
+### 📦 Building for Production
+
+**To create a production-ready build:**
+```bash
+bun run build
+```
+
+The output will be generated in the dist/ folder, ready for deployment on Vercel.
+
+***
